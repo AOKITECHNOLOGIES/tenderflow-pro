@@ -63,7 +63,14 @@ export function initAuth() {
           .then(() => {});
       }
 
-      _notifyListeners('SIGNED_IN', _currentProfile);
+      // Navigate to intended route if one was stored
+        const intended = sessionStorage.getItem('tf_intended_route');
+        if (intended) {
+          sessionStorage.removeItem('tf_intended_route');
+          window.location.hash = intended;
+        }
+
+        _notifyListeners('SIGNED_IN', _currentProfile);
 
     } else if (event === 'TOKEN_REFRESHED') {
       // Just update the profile silently — don't re-trigger full SIGNED_IN

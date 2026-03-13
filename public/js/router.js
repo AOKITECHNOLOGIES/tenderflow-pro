@@ -112,9 +112,11 @@ function handleRouteChange() {
   const route = matchRoute(hash);
   const profile = getProfile();
 
-  // Auth guard
+  // Auth guard — if profile not loaded yet, wait for INITIAL_SESSION
+  // instead of immediately redirecting to login
   if (route.auth && !profile) {
-    navigate('/login');
+    // Store intended route and wait — auth.js will call navigate() after profile loads
+    sessionStorage.setItem('tf_intended_route', hash);
     return;
   }
 
