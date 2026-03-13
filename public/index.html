@@ -284,6 +284,7 @@
 
     // ── Auth Handler ──────────────────────────────────────────────────────────
     onAuthChange(async (event, profile) => {
+      if (event === 'SIGNED_IN' && _shellMounted) return;
       if (event === 'SIGNED_IN') {
         showApp();
         syncDraftsToServer();
