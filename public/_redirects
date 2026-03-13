@@ -1,0 +1,4 @@
+# TenderFlow Pro — Netlify SPA Redirects
+# All routes fall through to index.html for client-side routing
+
+/*    /index.html   200
