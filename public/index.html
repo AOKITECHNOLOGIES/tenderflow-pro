@@ -433,6 +433,8 @@
     // ── Auth Event Handling ─────────────────────────────────────────────────
     // FIX: callback is now async so await works inside it
 
+    let _isFirstLoad = true;
+
     onAuthChange(async (event, profile) => {
       if (event === 'SIGNED_IN') {
         showApp();
@@ -449,7 +451,11 @@
           renderView(currentRoute);
         }
 
-        toast(`Welcome back, ${profile.full_name}`, 'success');
+        // Only show welcome toast on actual login, not page refresh
+        if (!_isFirstLoad) {
+          toast(`Welcome back, ${profile.full_name}`, 'success');
+        }
+        _isFirstLoad = false;
       } else if (event === 'SIGNED_OUT') {
         showAuth('login');
       } else if (event === 'COMPANY_SUSPENDED') {
@@ -554,6 +560,9 @@
 
     // ── Initialize ──────────────────────────────────────────────────────────
 
+    // initAuth() sets up the onAuthStateChange listener which handles
+    // INITIAL_SESSION (page refresh with existing session) and SIGNED_IN/OUT.
+    // Do NOT manually call showAuth() here — let the listener handle all states.
     initAuth();
 
     // Register service worker
@@ -564,11 +573,14 @@
         .catch((err) => console.error('[SW] Registration failed:', err));
     }
 
-    // Check initial auth state
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      showAuth('login');
-    }
+    // Safety fallback: if INITIAL_SESSION hasn't resolved after 3s, show login
+    setTimeout(async () => {
+      const loadingVisible = !document.getElementById('loading-screen').classList.contains('hidden');
+      if (loadingVisible) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) showAuth('login');
+      }
+    }, 3000);
   </script>
 
 </body>
