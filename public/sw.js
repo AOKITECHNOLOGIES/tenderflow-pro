@@ -3,7 +3,7 @@
 // Handles: App Shell caching, offline draft saving, install prompt
 // ============================================================================
 
-const CACHE_NAME = 'tenderflow-v2';
+const CACHE_NAME = 'tenderflow-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
