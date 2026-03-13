@@ -125,7 +125,7 @@
     VITE_SUPABASE_URL: 'https://hrkhqczuttggwdodjfsh.supabase.co',
     VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhya2hxY3p1dHRnZ3dkb2RqZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTk4NjQsImV4cCI6MjA4ODk3NTg2NH0.VQ8chS-U1ZYvChhffp2HKAjYhvBuYa7-7MJJerlcROY'
   };
-</script>
+  </script>
 
   <!-- ════════════════════════════════════════════════════════════════════════ -->
   <!-- LOADING SCREEN                                                         -->
@@ -347,10 +347,9 @@
   </div>
 
   <!-- ════════════════════════════════════════════════════════════════════════ -->
-  <!-- MAIN APP SHELL (shown when logged in) — Phase 3 will populate this    -->
+  <!-- MAIN APP SHELL (shown when logged in)                                  -->
   <!-- ════════════════════════════════════════════════════════════════════════ -->
   <div id="app-container" class="hidden h-full">
-    <!-- Sidebar + Main Content will be injected here in Phase 3 -->
     <div id="app-root" class="h-full flex">
       <div class="flex-1 flex items-center justify-center text-slate-400">
         <p>App shell loaded. Phase 3 will build the dashboard UI.</p>
@@ -420,7 +419,6 @@
       document.getElementById('app-container').classList.add('hidden');
       document.getElementById('auth-container').classList.remove('hidden');
 
-      // Hide all auth views, show requested
       document.querySelectorAll('#auth-container > div').forEach((el) => el.classList.add('hidden'));
       const target = document.getElementById(`view-${view}`);
       if (target) target.classList.remove('hidden');
@@ -433,19 +431,21 @@
     }
 
     // ── Auth Event Handling ─────────────────────────────────────────────────
+    // FIX: callback is now async so await works inside it
 
-    onAuthChange((event, profile) => {
+    onAuthChange(async (event, profile) => {
       if (event === 'SIGNED_IN') {
         showApp();
         syncDraftsToServer();
 
-        // Mount app shell if not already mounted
+        // Mount app shell
         const { mountAppShell, renderView } = await import('./js/app-shell.js');
         mountAppShell();
 
         // Render current route
-        const currentRoute = (await import('./js/router.js')).getCurrentRoute();
-        if (currentRoute && !['login','signup','forgot-password'].includes(currentRoute.view)) {
+        const { getCurrentRoute } = await import('./js/router.js');
+        const currentRoute = getCurrentRoute();
+        if (currentRoute && !['login', 'signup', 'forgot-password'].includes(currentRoute.view)) {
           renderView(currentRoute);
         }
 
@@ -540,19 +540,15 @@
 
     // ── Router Integration ──────────────────────────────────────────────────
 
-    // Import app shell + wiring patches
     const { mountAppShell, renderView } = await import('./js/app-shell.js');
     const wiring = await import('./js/wiring.js');
     const batch2 = await import('./js/batch2-wiring.js');
 
     initRouter((route, params) => {
-      // Handle auth views via router
       if (['login', 'signup', 'forgot-password', 'reset-password'].includes(route.view)) {
         showAuth(route.view);
         return;
       }
-
-      // Render authenticated views
       renderView(route);
     });
 
