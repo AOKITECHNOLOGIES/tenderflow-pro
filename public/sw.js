@@ -3,16 +3,22 @@
 // Handles: App Shell caching, offline draft saving, install prompt
 // ============================================================================
 
-const CACHE_NAME = 'tenderflow-v1';
+const CACHE_NAME = 'tenderflow-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/css/app.css',
-  '/js/app.js',
   '/js/supabase-client.js',
   '/js/auth.js',
   '/js/router.js',
+  '/js/app-shell.js',
+  '/js/compiler.js',
+  '/js/wiring.js',
+  '/js/notifications.js',
+  '/js/company-settings.js',
+  '/js/reports.js',
+  '/js/user-import.js',
+  '/js/batch2-wiring.js',
 ];
 
 // ── INSTALL: Cache app shell ────────────────────────────────────────────────
@@ -71,7 +77,6 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SYNC_DRAFTS') {
     console.log('[SW] Draft sync requested');
-    // Broadcast to all clients to trigger localStorage → Supabase sync
     self.clients.matchAll().then((clients) => {
       clients.forEach((client) => {
         client.postMessage({ type: 'TRIGGER_DRAFT_SYNC' });
