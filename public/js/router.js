@@ -30,6 +30,7 @@ const routes = {
   '/tenders/:id/compile': { view: 'tender-compile', auth: true,  role: 'bid_manager' },
   '/documents':        { view: 'documents',         auth: true,  role: 'bid_manager' },
   '/leaderboard':      { view: 'leaderboard',       auth: true,  role: 'bid_manager' },
+  '/reports':          { view: 'reports',           auth: true,  role: 'bid_manager' },
 
   // IT Admin+
   '/users':            { view: 'users',             auth: true,  role: 'it_admin' },
@@ -154,7 +155,7 @@ export function destroyRouter() {
 export function getSidebarItems(role) {
   const items = [];
 
-  // Everyone gets dashboard
+  // Everyone gets dashboard and tasks
   items.push({
     label: 'Dashboard',
     icon: 'grid',
@@ -162,7 +163,6 @@ export function getSidebarItems(role) {
     roles: ['dept_user', 'bid_manager', 'it_admin', 'super_admin'],
   });
 
-  // Tasks — everyone
   items.push({
     label: 'My Tasks',
     icon: 'check-square',
@@ -170,7 +170,7 @@ export function getSidebarItems(role) {
     roles: ['dept_user', 'bid_manager', 'it_admin', 'super_admin'],
   });
 
-  // Tenders — bid_manager+
+  // Tenders, Documents, Leaderboard, Reports — bid_manager+
   if (hasRoleLevel('bid_manager')) {
     items.push({
       label: 'Tenders',
@@ -188,6 +188,12 @@ export function getSidebarItems(role) {
       label: 'Leaderboard',
       icon: 'award',
       path: '/leaderboard',
+      roles: ['bid_manager', 'it_admin', 'super_admin'],
+    });
+    items.push({
+      label: 'Reports',
+      icon: 'bar-chart',
+      path: '/reports',
       roles: ['bid_manager', 'it_admin', 'super_admin'],
     });
   }
