@@ -9,7 +9,6 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230ea5e9'/><text x='50%25' y='55%25' text-anchor='middle' dominant-baseline='central' fill='white' font-size='18' font-weight='bold'>T</text></svg>" />
   <title>TenderFlow Pro</title>
 
-  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -18,27 +17,13 @@
         extend: {
           colors: {
             brand: {
-              50:  '#f0f9ff',
-              100: '#e0f2fe',
-              200: '#bae6fd',
-              300: '#7dd3fc',
-              400: '#38bdf8',
-              500: '#0ea5e9',
-              600: '#0284c7',
-              700: '#0369a1',
-              800: '#075985',
-              900: '#0c4a6e',
-              950: '#082f49',
+              50:  '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd', 300: '#7dd3fc',
+              400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1',
+              800: '#075985', 900: '#0c4a6e', 950: '#082f49',
             },
             surface: {
-              0:   '#ffffff',
-              50:  '#f8fafc',
-              100: '#f1f5f9',
-              200: '#e2e8f0',
-              700: '#1e293b',
-              800: '#0f172a',
-              900: '#0a0f1e',
-              950: '#060a14',
+              0: '#ffffff', 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0',
+              700: '#1e293b', 800: '#0f172a', 900: '#0a0f1e', 950: '#060a14',
             },
           },
           fontFamily: {
@@ -50,70 +35,28 @@
     };
   </script>
 
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-
-  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@0.300.0/dist/umd/lucide.js"></script>
 
   <style>
-    /* Custom scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #475569; }
-
-    /* Transitions */
     .view-enter { animation: viewIn 0.2s ease-out; }
-    @keyframes viewIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Sidebar transition */
-    .sidebar-item {
-      transition: all 0.15s ease;
-    }
-    .sidebar-item:hover {
-      background: rgba(14, 165, 233, 0.08);
-    }
-    .sidebar-item.active {
-      background: rgba(14, 165, 233, 0.12);
-      color: #0ea5e9;
-      border-right: 2px solid #0ea5e9;
-    }
-
-    /* Loading shimmer */
-    .shimmer {
-      background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s infinite;
-    }
-    @keyframes shimmer {
-      0%   { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-
-    /* Toast */
-    .toast {
-      animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 3.7s forwards;
-    }
-    @keyframes toastIn {
-      from { opacity: 0; transform: translateY(16px) scale(0.95); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    @keyframes toastOut {
-      from { opacity: 1; }
-      to   { opacity: 0; transform: translateY(-8px); }
-    }
-
-    /* Grid pattern for login */
+    @keyframes viewIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .sidebar-item { transition: all 0.15s ease; }
+    .sidebar-item:hover { background: rgba(14, 165, 233, 0.08); }
+    .sidebar-item.active { background: rgba(14, 165, 233, 0.12); color: #0ea5e9; border-right: 2px solid #0ea5e9; }
+    .shimmer { background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .toast { animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 3.7s forwards; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(16px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-8px); } }
     .grid-bg {
-      background-image:
-        linear-gradient(rgba(14, 165, 233, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(14, 165, 233, 0.03) 1px, transparent 1px);
+      background-image: linear-gradient(rgba(14,165,233,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(14,165,233,0.03) 1px, transparent 1px);
       background-size: 48px 48px;
     }
   </style>
@@ -121,15 +64,13 @@
 
 <body class="h-full bg-surface-900 text-slate-200 font-sans antialiased">
   <script>
-  window.__ENV__ = {
-    VITE_SUPABASE_URL: 'https://hrkhqczuttggwdodjfsh.supabase.co',
-    VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhya2hxY3p1dHRnZ3dkb2RqZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTk4NjQsImV4cCI6MjA4ODk3NTg2NH0.VQ8chS-U1ZYvChhffp2HKAjYhvBuYa7-7MJJerlcROY'
-  };
+    window.__ENV__ = {
+      VITE_SUPABASE_URL: 'https://hrkhqczuttggwdodjfsh.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhya2hxY3p1dHRnZ3dkb2RqZnNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzOTk4NjQsImV4cCI6MjA4ODk3NTg2NH0.VQ8chS-U1ZYvChhffp2HKAjYhvBuYa7-7MJJerlcROY'
+    };
   </script>
 
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
-  <!-- LOADING SCREEN                                                         -->
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!-- LOADING SCREEN -->
   <div id="loading-screen" class="fixed inset-0 z-[100] bg-surface-900 flex items-center justify-center">
     <div class="text-center">
       <div class="inline-flex items-center gap-3 mb-4">
@@ -144,16 +85,13 @@
     </div>
   </div>
 
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
-  <!-- AUTH SCREENS (shown when not logged in)                                -->
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!-- AUTH SCREENS -->
   <div id="auth-container" class="hidden h-full">
 
-    <!-- LOGIN VIEW -->
+    <!-- LOGIN -->
     <div id="view-login" class="hidden h-full grid-bg">
       <div class="min-h-full flex items-center justify-center p-6">
         <div class="w-full max-w-md">
-          <!-- Logo -->
           <div class="text-center mb-8">
             <div class="inline-flex items-center gap-3 mb-3">
               <div class="w-11 h-11 bg-brand-500 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/20">
@@ -163,62 +101,39 @@
             </div>
             <p class="text-slate-400 text-sm">AI-Driven Tender Proposal Platform</p>
           </div>
-
-          <!-- Login Card -->
           <div class="bg-surface-800/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8 shadow-xl">
             <h2 class="text-lg font-semibold text-white mb-6">Sign in to your account</h2>
-
             <div id="login-error" class="hidden mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
-
             <form id="login-form" class="space-y-5">
               <div>
                 <label for="login-email" class="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
-                <input
-                  id="login-email"
-                  type="email"
-                  required
-                  autocomplete="email"
-                  placeholder="you@company.com"
-                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition"
-                />
+                <input id="login-email" type="email" required autocomplete="email" placeholder="you@company.com"
+                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition" />
               </div>
               <div>
                 <div class="flex items-center justify-between mb-1.5">
                   <label for="login-password" class="block text-sm font-medium text-slate-300">Password</label>
                   <a href="#/forgot-password" class="text-xs text-brand-400 hover:text-brand-300 transition">Forgot password?</a>
                 </div>
-                <input
-                  id="login-password"
-                  type="password"
-                  required
-                  autocomplete="current-password"
-                  placeholder="••••••••"
-                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition"
-                />
+                <input id="login-password" type="password" required autocomplete="current-password" placeholder="••••••••"
+                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition" />
               </div>
-              <button
-                type="submit"
-                id="login-btn"
-                class="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:ring-offset-2 focus:ring-offset-surface-800 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button type="submit" id="login-btn"
+                class="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:ring-offset-2 focus:ring-offset-surface-800 disabled:opacity-50 disabled:cursor-not-allowed">
                 Sign in
               </button>
             </form>
-
             <p class="mt-6 text-center text-sm text-slate-400">
               Don't have an account?
               <a href="#/signup" class="text-brand-400 hover:text-brand-300 font-medium transition">Request access</a>
             </p>
           </div>
-
-          <p class="mt-6 text-center text-xs text-slate-500">
-            Secured with enterprise-grade encryption
-          </p>
+          <p class="mt-6 text-center text-xs text-slate-500">Secured with enterprise-grade encryption</p>
         </div>
       </div>
     </div>
 
-    <!-- SIGNUP VIEW -->
+    <!-- SIGNUP -->
     <div id="view-signup" class="hidden h-full grid-bg">
       <div class="min-h-full flex items-center justify-center p-6">
         <div class="w-full max-w-md">
@@ -231,66 +146,37 @@
             </div>
             <p class="text-slate-400 text-sm">Create your account</p>
           </div>
-
           <div class="bg-surface-800/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8 shadow-xl">
             <div id="signup-error" class="hidden mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
             <div id="signup-success" class="hidden mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm"></div>
-
             <form id="signup-form" class="space-y-5">
               <div>
                 <label for="signup-name" class="block text-sm font-medium text-slate-300 mb-1.5">Full Name</label>
-                <input
-                  id="signup-name"
-                  type="text"
-                  required
-                  placeholder="Jane Doe"
-                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition"
-                />
+                <input id="signup-name" type="text" required placeholder="Jane Doe"
+                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition" />
               </div>
               <div>
                 <label for="signup-email" class="block text-sm font-medium text-slate-300 mb-1.5">Work Email</label>
-                <input
-                  id="signup-email"
-                  type="email"
-                  required
-                  autocomplete="email"
-                  placeholder="jane@company.com"
-                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition"
-                />
+                <input id="signup-email" type="email" required autocomplete="email" placeholder="jane@company.com"
+                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition" />
               </div>
               <div>
                 <label for="signup-company-code" class="block text-sm font-medium text-slate-300 mb-1.5">
-                  Company Code
-                  <span class="text-slate-500 font-normal">(from your IT admin)</span>
+                  Company Code <span class="text-slate-500 font-normal">(from your IT admin)</span>
                 </label>
-                <input
-                  id="signup-company-code"
-                  type="text"
-                  placeholder="acme-corp"
-                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition font-mono text-sm"
-                />
+                <input id="signup-company-code" type="text" placeholder="acme-corp"
+                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition font-mono text-sm" />
               </div>
               <div>
                 <label for="signup-password" class="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
-                <input
-                  id="signup-password"
-                  type="password"
-                  required
-                  minlength="8"
-                  autocomplete="new-password"
-                  placeholder="Min 8 characters"
-                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition"
-                />
+                <input id="signup-password" type="password" required minlength="8" autocomplete="new-password" placeholder="Min 8 characters"
+                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition" />
               </div>
-              <button
-                type="submit"
-                id="signup-btn"
-                class="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:ring-offset-2 focus:ring-offset-surface-800 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button type="submit" id="signup-btn"
+                class="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:ring-offset-2 focus:ring-offset-surface-800 disabled:opacity-50 disabled:cursor-not-allowed">
                 Create account
               </button>
             </form>
-
             <p class="mt-6 text-center text-sm text-slate-400">
               Already have an account?
               <a href="#/login" class="text-brand-400 hover:text-brand-300 font-medium transition">Sign in</a>
@@ -300,7 +186,7 @@
       </div>
     </div>
 
-    <!-- FORGOT PASSWORD VIEW -->
+    <!-- FORGOT PASSWORD -->
     <div id="view-forgot-password" class="hidden h-full grid-bg">
       <div class="min-h-full flex items-center justify-center p-6">
         <div class="w-full max-w-md">
@@ -313,30 +199,19 @@
             <h2 class="text-xl font-bold text-white">Reset your password</h2>
             <p class="text-slate-400 text-sm mt-1">We'll send you a reset link</p>
           </div>
-
           <div class="bg-surface-800/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-8 shadow-xl">
             <div id="forgot-error" class="hidden mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
             <div id="forgot-success" class="hidden mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm"></div>
-
             <form id="forgot-form" class="space-y-5">
               <div>
                 <label for="forgot-email" class="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
-                <input
-                  id="forgot-email"
-                  type="email"
-                  required
-                  placeholder="you@company.com"
-                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition"
-                />
+                <input id="forgot-email" type="email" required placeholder="you@company.com"
+                  class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition" />
               </div>
-              <button
-                type="submit"
-                class="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg transition"
-              >
+              <button type="submit" class="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg transition">
                 Send reset link
               </button>
             </form>
-
             <p class="mt-6 text-center text-sm text-slate-400">
               <a href="#/login" class="text-brand-400 hover:text-brand-300 font-medium transition">Back to sign in</a>
             </p>
@@ -346,55 +221,36 @@
     </div>
   </div>
 
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
-  <!-- MAIN APP SHELL (shown when logged in)                                  -->
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!-- MAIN APP SHELL -->
   <div id="app-container" class="hidden h-full">
     <div id="app-root" class="h-full flex">
       <div class="flex-1 flex items-center justify-center text-slate-400">
-        <p>App shell loaded. Phase 3 will build the dashboard UI.</p>
+        <p>Loading...</p>
       </div>
     </div>
   </div>
 
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
-  <!-- TOAST CONTAINER                                                        -->
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!-- TOAST CONTAINER -->
   <div id="toast-container" class="fixed bottom-6 right-6 z-[200] flex flex-col gap-2"></div>
 
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
-  <!-- APP BOOTSTRAP                                                          -->
-  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!-- APP BOOTSTRAP -->
   <script type="module">
     import { supabase } from './js/supabase-client.js';
     import {
-      initAuth,
-      onAuthChange,
-      getProfile,
-      login,
-      signup,
-      requestPasswordReset,
-      logout,
-      canInstallPWA,
-      promptPWAInstall,
-      syncDraftsToServer,
+      initAuth, onAuthChange, getProfile,
+      login, signup, requestPasswordReset, logout,
+      canInstallPWA, promptPWAInstall, syncDraftsToServer,
     } from './js/auth.js';
     import { initRouter, navigate } from './js/router.js';
 
-    // ── Globals ─────────────────────────────────────────────────────────────
+    // ── Module-level state — persists across all auth events ─────────────────
+    let _shellMounted = false;
+    let _isFirstLogin = false;
 
-    window.TF = {
-      supabase,
-      login,
-      signup,
-      logout,
-      getProfile,
-      navigate,
-      toast,
-    };
+    // ── Globals ──────────────────────────────────────────────────────────────
+    window.TF = { supabase, login, signup, logout, getProfile, navigate, toast };
 
-    // ── Toast Helper ────────────────────────────────────────────────────────
-
+    // ── Toast ─────────────────────────────────────────────────────────────────
     function toast(message, type = 'info') {
       const container = document.getElementById('toast-container');
       const colors = {
@@ -403,22 +259,18 @@
         error:   'bg-surface-700 border-red-500/30 text-red-300',
         warning: 'bg-surface-700 border-amber-500/30 text-amber-300',
       };
-
       const el = document.createElement('div');
       el.className = `toast px-4 py-3 rounded-lg border text-sm shadow-lg max-w-sm ${colors[type] || colors.info}`;
       el.textContent = message;
       container.appendChild(el);
-
       setTimeout(() => el.remove(), 4200);
     }
 
-    // ── UI Toggle ───────────────────────────────────────────────────────────
-
+    // ── UI Helpers ────────────────────────────────────────────────────────────
     function showAuth(view = 'login') {
       document.getElementById('loading-screen').classList.add('hidden');
       document.getElementById('app-container').classList.add('hidden');
       document.getElementById('auth-container').classList.remove('hidden');
-
       document.querySelectorAll('#auth-container > div').forEach((el) => el.classList.add('hidden'));
       const target = document.getElementById(`view-${view}`);
       if (target) target.classList.remove('hidden');
@@ -430,37 +282,44 @@
       document.getElementById('app-container').classList.remove('hidden');
     }
 
-    // ── Auth Event Handling ─────────────────────────────────────────────────
-    // FIX: callback is now async so await works inside it
-
-    let _shellMounted = false;
-    let _isFirstLoad = true;
-
+    // ── Auth Handler ──────────────────────────────────────────────────────────
     onAuthChange(async (event, profile) => {
       if (event === 'SIGNED_IN') {
         showApp();
         syncDraftsToServer();
 
-        // Mount app shell
+        // Import modules (browser caches these after first load)
         const { mountAppShell, renderView } = await import('./js/app-shell.js');
+        await import('./js/wiring.js');
+        await import('./js/batch2-wiring.js');
+
+        // Only mount the shell once — never rebuild it
         if (!_shellMounted) {
           mountAppShell();
           _shellMounted = true;
         }
 
-        // Render current route
-        const { getCurrentRoute } = await import('./js/router.js');
-        const currentRoute = getCurrentRoute();
-        if (currentRoute && !['login', 'signup', 'forgot-password'].includes(currentRoute.view)) {
-          renderView(currentRoute);
+        // If a route was stored before auth resolved, navigate there now
+        const intended = sessionStorage.getItem('tf_intended_route');
+        if (intended) {
+          sessionStorage.removeItem('tf_intended_route');
+          window.location.hash = intended;
+        } else {
+          const { getCurrentRoute } = await import('./js/router.js');
+          const currentRoute = getCurrentRoute();
+          if (currentRoute && !['login', 'signup', 'forgot-password'].includes(currentRoute.view)) {
+            renderView(currentRoute);
+          }
         }
 
-        // Only show welcome toast on actual login, not page refresh
-        if (!_isFirstLoad) {
+        // Only show welcome toast on actual user-initiated login
+        if (_isFirstLogin) {
           toast(`Welcome back, ${profile.full_name}`, 'success');
+          _isFirstLogin = false;
         }
-        _isFirstLoad = false;
+
       } else if (event === 'SIGNED_OUT') {
+        _shellMounted = false;
         showAuth('login');
       } else if (event === 'COMPANY_SUSPENDED') {
         showAuth('login');
@@ -471,33 +330,28 @@
       }
     });
 
-    // ── Form Handlers ───────────────────────────────────────────────────────
-
-    // Login
+    // ── Form: Login ───────────────────────────────────────────────────────────
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('login-btn');
       const errEl = document.getElementById('login-error');
       errEl.classList.add('hidden');
-
       const email = document.getElementById('login-email').value;
       const password = document.getElementById('login-password').value;
-
       btn.disabled = true;
       btn.textContent = 'Signing in...';
-
+      _isFirstLogin = true;
       const result = await login(email, password);
-
       if (!result.success) {
+        _isFirstLogin = false;
         errEl.textContent = result.error;
         errEl.classList.remove('hidden');
       }
-
       btn.disabled = false;
       btn.textContent = 'Sign in';
     });
 
-    // Signup
+    // ── Form: Signup ──────────────────────────────────────────────────────────
     document.getElementById('signup-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('signup-btn');
@@ -505,17 +359,13 @@
       const successEl = document.getElementById('signup-success');
       errEl.classList.add('hidden');
       successEl.classList.add('hidden');
-
       const name = document.getElementById('signup-name').value;
       const email = document.getElementById('signup-email').value;
       const companyCode = document.getElementById('signup-company-code').value;
       const password = document.getElementById('signup-password').value;
-
       btn.disabled = true;
       btn.textContent = 'Creating account...';
-
       const result = await signup(email, password, name, companyCode || null);
-
       if (!result.success) {
         errEl.textContent = result.error;
         errEl.classList.remove('hidden');
@@ -523,22 +373,19 @@
         successEl.textContent = 'Check your email to confirm your account.';
         successEl.classList.remove('hidden');
       }
-
       btn.disabled = false;
       btn.textContent = 'Create account';
     });
 
-    // Forgot Password
+    // ── Form: Forgot Password ─────────────────────────────────────────────────
     document.getElementById('forgot-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errEl = document.getElementById('forgot-error');
       const successEl = document.getElementById('forgot-success');
       errEl.classList.add('hidden');
       successEl.classList.add('hidden');
-
       const email = document.getElementById('forgot-email').value;
       const result = await requestPasswordReset(email);
-
       if (result.success) {
         successEl.textContent = 'Reset link sent. Check your email.';
         successEl.classList.remove('hidden');
@@ -548,28 +395,29 @@
       }
     });
 
-    // ── Router Integration ──────────────────────────────────────────────────
-
+    // ── Router ────────────────────────────────────────────────────────────────
     const { mountAppShell, renderView } = await import('./js/app-shell.js');
-    const wiring = await import('./js/wiring.js');
-    const batch2 = await import('./js/batch2-wiring.js');
+    await import('./js/wiring.js');
+    await import('./js/batch2-wiring.js');
 
     initRouter((route, params) => {
+      // Public routes — show auth screens
       if (['login', 'signup', 'forgot-password', 'reset-password'].includes(route.view)) {
         showAuth(route.view);
         return;
       }
+      // Shell not ready yet — store intended route, auth handler will redirect after login
+      if (!_shellMounted) {
+        sessionStorage.setItem('tf_intended_route', window.location.hash);
+        return;
+      }
+      // Shell is ready — render the view
       renderView(route);
     });
 
-    // ── Initialize ──────────────────────────────────────────────────────────
-
-    // initAuth() sets up the onAuthStateChange listener which handles
-    // INITIAL_SESSION (page refresh with existing session) and SIGNED_IN/OUT.
-    // Do NOT manually call showAuth() here — let the listener handle all states.
+    // ── Boot ──────────────────────────────────────────────────────────────────
     initAuth();
 
-    // Register service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
@@ -577,14 +425,14 @@
         .catch((err) => console.error('[SW] Registration failed:', err));
     }
 
-    // Safety fallback: if INITIAL_SESSION hasn't resolved after 3s, show login
+    // Fallback: if loading screen is still showing after 4s, check session
     setTimeout(async () => {
-      const loadingVisible = !document.getElementById('loading-screen').classList.contains('hidden');
-      if (loadingVisible) {
+      const loading = document.getElementById('loading-screen');
+      if (!loading.classList.contains('hidden')) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) showAuth('login');
       }
-    }, 3000);
+    }, 4000);
   </script>
 
 </body>
