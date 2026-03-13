@@ -65,14 +65,17 @@ export function getCurrentRoute() {
 function matchRoute(hash) {
   const path = hash.replace('#', '') || '/';
 
-  // Exact match
+  // Exact match first — always wins over parameterized routes
   if (routes[path]) {
     _routeParams = {};
     return { ...routes[path], path };
   }
 
-  // Parameterized match
+  // Parameterized match — only runs if NO exact match exists
   for (const [pattern, config] of Object.entries(routes)) {
+    // Skip patterns with no params — they would have matched above
+    if (!pattern.includes(':')) continue;
+
     const patternParts = pattern.split('/');
     const pathParts = path.split('/');
 
