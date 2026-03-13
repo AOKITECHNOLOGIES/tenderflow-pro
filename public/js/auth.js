@@ -8,7 +8,8 @@ import { supabase, getCurrentUser, getCurrentProfile } from './supabase-client.j
 // ── State ────────────────────────────────────────────────────────────────────
 let _currentProfile = null;
 let _authListeners = [];
-let _sessionInitialized = false; // Prevent double-fire on init
+let _sessionInitialized = false;
+let _initialSessionTimer = null; // Prevents INITIAL_SESSION + SIGNED_IN double-fire
 
 export function getProfile() {
   return _currentProfile;
@@ -30,15 +31,55 @@ export function initAuth() {
   supabase.auth.onAuthStateChange(async (event, session) => {
     console.log('[Auth] State change:', event);
 
-    if (event === 'SIGNED_IN') {
-      // Prevent double-fire: skip if we already have the same session loaded
+    if (event === 'INITIAL_SESSION') {
+      // Supabase fires INITIAL_SESSION on every page load.
+      // On a FRESH LOGIN, it fires INITIAL_SESSION (no session) then SIGNED_IN.
+      // On a PAGE REFRESH, it fires INITIAL_SESSION (with session) and nothing after.
+      // So: if we have a session, wait 200ms — if SIGNED_IN doesn't fire, handle it here.
+      if (session) {
+        _initialSessionTimer = setTimeout(async () => {
+          // SIGNED_IN did not follow — this is a page refresh, handle it ourselves
+          if (_sessionInitialized) return; // SIGNED_IN already handled it
+
+          _currentProfile = await getCurrentProfile();
+          _sessionInitialized = true;
+
+          if (_currentProfile?.company_id) {
+            const company = _currentProfile.companies;
+            if (company && !company.is_active) {
+              await logout();
+              _notifyListeners('COMPANY_SUSPENDED', null);
+              return;
+            }
+          }
+
+          if (_currentProfile && !_currentProfile.is_active) {
+            await logout();
+            _notifyListeners('USER_SUSPENDED', null);
+            return;
+          }
+
+          _notifyListeners('SIGNED_IN', _currentProfile);
+        }, 200);
+      } else {
+        // No session on load — show login
+        _notifyListeners('SIGNED_OUT', null);
+      }
+
+    } else if (event === 'SIGNED_IN') {
+      // Cancel the INITIAL_SESSION timer — we'll handle it here
+      if (_initialSessionTimer) {
+        clearTimeout(_initialSessionTimer);
+        _initialSessionTimer = null;
+      }
+
+      // Prevent double-fire
       if (_sessionInitialized && _currentProfile) return;
 
       _currentProfile = await getCurrentProfile();
       _sessionInitialized = true;
 
-      // Check if company is active (non-super-admins)
-      if (_currentProfile && _currentProfile.company_id) {
+      if (_currentProfile?.company_id) {
         const company = _currentProfile.companies;
         if (company && !company.is_active) {
           await logout();
@@ -47,7 +88,6 @@ export function initAuth() {
         }
       }
 
-      // Check if user is active
       if (_currentProfile && !_currentProfile.is_active) {
         await logout();
         _notifyListeners('USER_SUSPENDED', null);
@@ -63,54 +103,25 @@ export function initAuth() {
           .then(() => {});
       }
 
-      // Navigate to intended route if one was stored
-        const intended = sessionStorage.getItem('tf_intended_route');
-        if (intended) {
-          sessionStorage.removeItem('tf_intended_route');
-          window.location.hash = intended;
-        }
-
-        _notifyListeners('SIGNED_IN', _currentProfile);
+      _notifyListeners('SIGNED_IN', _currentProfile);
 
     } else if (event === 'TOKEN_REFRESHED') {
-      // Just update the profile silently — don't re-trigger full SIGNED_IN
+      // Silently update profile — don't re-trigger SIGNED_IN
       _currentProfile = await getCurrentProfile();
-
-    } else if (event === 'INITIAL_SESSION') {
-      // Session restored from storage on page load
-      if (session) {
-        _currentProfile = await getCurrentProfile();
-        _sessionInitialized = true;
-
-        if (_currentProfile && _currentProfile.company_id) {
-          const company = _currentProfile.companies;
-          if (company && !company.is_active) {
-            await logout();
-            _notifyListeners('COMPANY_SUSPENDED', null);
-            return;
-          }
-        }
-
-        if (_currentProfile && !_currentProfile.is_active) {
-          await logout();
-          _notifyListeners('USER_SUSPENDED', null);
-          return;
-        }
-
-        _notifyListeners('SIGNED_IN', _currentProfile);
-      } else {
-        _notifyListeners('SIGNED_OUT', null);
-      }
 
     } else if (event === 'SIGNED_OUT') {
       _currentProfile = null;
       _sessionInitialized = false;
+      if (_initialSessionTimer) {
+        clearTimeout(_initialSessionTimer);
+        _initialSessionTimer = null;
+      }
       _notifyListeners('SIGNED_OUT', null);
     }
   });
 }
 
-// ── Login ────────────────────────────────────────────────────────────────────
+// ── Login ─────────────────────────────────────────────────────────────────────
 export async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
@@ -136,7 +147,7 @@ export async function login(email, password) {
   return { success: true, user: data.user };
 }
 
-// ── Signup ───────────────────────────────────────────────────────────────────
+// ── Signup ────────────────────────────────────────────────────────────────────
 export async function signup(email, password, fullName, companySlug = null) {
   let companyId = null;
   if (companySlug) {
@@ -189,7 +200,7 @@ export async function signup(email, password, fullName, companySlug = null) {
   };
 }
 
-// ── Logout ───────────────────────────────────────────────────────────────────
+// ── Logout ────────────────────────────────────────────────────────────────────
 export async function logout() {
   const { error } = await supabase.auth.signOut();
   _currentProfile = null;
@@ -198,7 +209,7 @@ export async function logout() {
   return !error;
 }
 
-// ── Password Reset ───────────────────────────────────────────────────────────
+// ── Password Reset ────────────────────────────────────────────────────────────
 export async function requestPasswordReset(email) {
   const redirectUrl = `${window.location.origin}/#/reset-password`;
   const { error } = await supabase.auth.resetPasswordForEmail(
@@ -215,7 +226,7 @@ export async function updatePassword(newPassword) {
   return { success: true };
 }
 
-// ── Role Guards ──────────────────────────────────────────────────────────────
+// ── Role Guards ───────────────────────────────────────────────────────────────
 const ROLE_LEVELS = {
   super_admin: 4,
   it_admin: 3,
@@ -248,7 +259,7 @@ export function isBidManager() {
   return hasRoleLevel('bid_manager');
 }
 
-// ── Offline Draft Sync ───────────────────────────────────────────────────────
+// ── Offline Draft Sync ────────────────────────────────────────────────────────
 const DRAFT_KEY = 'tenderflow_drafts';
 
 export function saveDraftOffline(taskId, content) {
@@ -299,7 +310,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// ── PWA Install Prompt ───────────────────────────────────────────────────────
+// ── PWA Install Prompt ────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
 
 window.addEventListener('beforeinstallprompt', (e) => {
