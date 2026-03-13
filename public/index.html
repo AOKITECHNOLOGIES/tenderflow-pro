@@ -433,6 +433,7 @@
     // ── Auth Event Handling ─────────────────────────────────────────────────
     // FIX: callback is now async so await works inside it
 
+    let _shellMounted = false;
     let _isFirstLoad = true;
 
     onAuthChange(async (event, profile) => {
@@ -442,7 +443,10 @@
 
         // Mount app shell
         const { mountAppShell, renderView } = await import('./js/app-shell.js');
-        mountAppShell();
+        if (!_shellMounted) {
+          mountAppShell();
+          _shellMounted = true;
+        }
 
         // Render current route
         const { getCurrentRoute } = await import('./js/router.js');
