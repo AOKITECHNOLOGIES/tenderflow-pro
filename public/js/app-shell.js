@@ -1,5 +1,5 @@
 // ============================================================================
-// TenderFlow Pro — App Shell (Phase 3)
+// TenderFlow Pro — App Shell
 // ============================================================================
 
 import { supabase } from './supabase-client.js';
@@ -32,14 +32,12 @@ const ICONS = {
 
 function icon(name) { return ICONS[name] || ''; }
 
-// ── Scope State ──────────────────────────────────────────────────────────────
 let _viewScope = 'global';
 let _selectedCompanyId = null;
 
 export function getViewScope() { return _viewScope; }
 export function getSelectedCompanyId() { return _selectedCompanyId; }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 function statCard(label, value, sublabel = '', color = 'brand') {
   const colors = {
     brand:   'from-brand-500/10 to-brand-500/5 border-brand-500/20',
@@ -67,7 +65,12 @@ function statusBadge(status) {
   return `<span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${map[status] || map.draft}">${label}</span>`;
 }
 
-// ── Sidebar ──────────────────────────────────────────────────────────────────
+async function getDepartments() {
+  const profile = getProfile();
+  const { data } = await supabase.from('profiles').select('department').eq('company_id', _selectedCompanyId || profile.company_id).not('department', 'is', null);
+  return [...new Set((data || []).map(d => d.department).filter(Boolean))].sort();
+}
+
 function renderSidebar() {
   const profile = getProfile();
   if (!profile) return '';
@@ -121,20 +124,16 @@ function renderSidebar() {
   return html;
 }
 
-// ── Views ────────────────────────────────────────────────────────────────────
 const views = {
 
   async dashboard() {
     const profile = getProfile();
-    const companyFilter = isSuperAdmin() && _viewScope === 'global'
-      ? {} : { company_id: _selectedCompanyId || profile.company_id };
-
+    const companyFilter = isSuperAdmin() && _viewScope === 'global' ? {} : { company_id: _selectedCompanyId || profile.company_id };
     const [tenders, tasks, myTasks] = await Promise.all([
       supabase.from('tenders').select('id, status, deadline', { count: 'exact' }).match(companyFilter),
       supabase.from('tasks').select('id, status', { count: 'exact' }).match(companyFilter),
       supabase.from('tasks').select('id, status, title, due_date, tenders(title)').eq('assigned_to', profile.id).neq('status', 'approved').limit(10),
     ]);
-
     const tenderCount = tenders.count || 0;
     const taskCount = tasks.count || 0;
     const activeTenders = (tenders.data || []).filter(t => !['submitted', 'archived'].includes(t.status)).length;
@@ -175,9 +174,7 @@ const views = {
   async tenders() {
     const profile = getProfile();
     const query = supabase.from('tenders').select('*, profiles!tenders_created_by_fkey(full_name)').order('created_at', { ascending: false });
-    if (!(isSuperAdmin() && _viewScope === 'global')) {
-      query.eq('company_id', _selectedCompanyId || profile.company_id);
-    }
+    if (!(isSuperAdmin() && _viewScope === 'global')) query.eq('company_id', _selectedCompanyId || profile.company_id);
     const { data: tenders } = await query;
 
     let html = `<div class="view-enter space-y-6">
@@ -468,11 +465,15 @@ const views = {
     const query = supabase.from('profiles').select('*, companies(name)').order('created_at', { ascending: false });
     if (!isSuperAdmin()) query.eq('company_id', profile.company_id);
     const { data: users } = await query;
+    const departments = await getDepartments();
 
     let html = `<div class="view-enter space-y-6">
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold text-white">User Management</h1>
-        <button onclick="window._createUser()" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">${icon('plus')} Invite User</button>
+        <div class="flex gap-2">
+          <button onclick="window._manageDepartments()" class="inline-flex items-center gap-2 px-4 py-2 border border-slate-600/50 text-slate-300 text-sm font-medium rounded-lg transition hover:bg-slate-700/20">Departments</button>
+          <button onclick="window._createUser()" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">${icon('plus')} Add User</button>
+        </div>
       </div>
       <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
         <table class="w-full text-sm">
@@ -482,6 +483,7 @@ const views = {
             <th class="px-5 py-3 text-left text-xs text-slate-400 uppercase">Department</th>
             ${isSuperAdmin() ? '<th class="px-5 py-3 text-left text-xs text-slate-400 uppercase">Company</th>' : ''}
             <th class="px-5 py-3 text-left text-xs text-slate-400 uppercase">Status</th>
+            <th class="px-5 py-3 text-left text-xs text-slate-400 uppercase">Actions</th>
           </tr></thead>
           <tbody class="divide-y divide-slate-700/30">`;
 
@@ -494,6 +496,10 @@ const views = {
         <td class="px-5 py-3">
           <span class="inline-flex h-2 w-2 rounded-full ${u.is_active ? 'bg-emerald-400' : 'bg-red-400'}"></span>
           <span class="text-xs ${u.is_active ? 'text-emerald-400' : 'text-red-400'} ml-1">${u.is_active ? 'Active' : 'Suspended'}</span>
+        </td>
+        <td class="px-5 py-3 flex gap-2">
+          <button onclick="window._editUser('${u.id}')" class="text-xs text-brand-400 hover:text-brand-300">Edit</button>
+          <button onclick="window._toggleUser('${u.id}', ${!u.is_active})" class="text-xs ${u.is_active ? 'text-red-400 hover:text-red-300' : 'text-emerald-400 hover:text-emerald-300'}">${u.is_active ? 'Suspend' : 'Activate'}</button>
         </td>
       </tr>`;
     }
@@ -610,7 +616,6 @@ const views = {
   },
 };
 
-// ── Mount App Shell ──────────────────────────────────────────────────────────
 export function mountAppShell() {
   const root = document.getElementById('app-root');
   if (!root) return;
@@ -634,25 +639,19 @@ async function loadCompaniesForScope() {
   const { data } = await supabase.from('companies').select('id, name').eq('is_active', true).order('name');
   for (const c of (data || [])) {
     const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.textContent = c.name;
+    opt.value = c.id; opt.textContent = c.name;
     select.appendChild(opt);
   }
 }
 
-// ── Render View ──────────────────────────────────────────────────────────────
 export async function renderView(route) {
   const container = document.getElementById('view-container');
   if (!container) return;
   container.innerHTML = `<div class="shimmer h-8 w-48 rounded mb-4"></div><div class="shimmer h-4 w-96 rounded"></div>`;
   const renderer = views[route.view];
   if (renderer) {
-    try {
-      container.innerHTML = await renderer();
-    } catch (err) {
-      console.error('[View] Render error:', err);
-      container.innerHTML = `<div class="p-8 text-center"><p class="text-red-400">Error loading view: ${err.message}</p></div>`;
-    }
+    try { container.innerHTML = await renderer(); }
+    catch (err) { console.error('[View] Render error:', err); container.innerHTML = `<div class="p-8 text-center"><p class="text-red-400">Error loading view: ${err.message}</p></div>`; }
   } else {
     container.innerHTML = `<div class="p-8 text-center text-slate-500">View "${route.view}" not implemented yet.</div>`;
   }
@@ -666,14 +665,12 @@ window._logout = async () => { await logout(); navigate('/login'); };
 window._setScope = (scope) => {
   _viewScope = scope;
   document.getElementById('scope-company-select')?.classList.toggle('hidden', scope !== 'company');
-  const route = getCurrentRoute();
-  if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) renderView(route);
 };
 
 window._selectCompany = async (id) => {
   _selectedCompanyId = id || null;
-  const route = getCurrentRoute();
-  if (!route || !_selectedCompanyId) return;
+  const route = getCurrentRoute(); if (!route || !_selectedCompanyId) return;
   await renderView(route);
 };
 
@@ -693,10 +690,7 @@ window._saveTaskContent = async (taskId) => {
   saveDraftOffline(taskId, content);
   const { error } = await supabase.from('tasks').update({ content }).eq('id', taskId);
   const statusEl = document.getElementById('save-status');
-  if (statusEl) {
-    statusEl.textContent = error ? 'Save failed — saved offline' : 'Saved ✓';
-    statusEl.className = `text-xs ${error ? 'text-amber-400' : 'text-emerald-400'}`;
-  }
+  if (statusEl) { statusEl.textContent = error ? 'Save failed — saved offline' : 'Saved ✓'; statusEl.className = `text-xs ${error ? 'text-amber-400' : 'text-emerald-400'}`; }
 };
 
 window._submitTask = async (taskId) => {
@@ -717,61 +711,46 @@ document.addEventListener('input', (e) => {
     }, 1500);
   }
 });
+
+// ── Tender Edit/Delete ───────────────────────────────────────────────────────
 window._editTender = async (tenderId) => {
   const { data: tender } = await supabase.from('tenders').select('*').eq('id', tenderId).single();
   if (!tender) return;
-
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
-  modal.innerHTML = `
-    <div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
-      <h3 class="text-lg font-semibold text-white mb-4">Edit Tender</h3>
-      <div id="edit-tender-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
-      <div class="space-y-4">
-        <div>
-          <label class="block text-sm text-slate-300 mb-1">Title *</label>
-          <input id="et-title" type="text" value="${tender.title}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-sm text-slate-300 mb-1">Reference Number</label>
-            <input id="et-ref" type="text" value="${tender.reference_number || ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
-          </div>
-          <div>
-            <label class="block text-sm text-slate-300 mb-1">Deadline</label>
-            <input id="et-deadline" type="datetime-local" value="${tender.deadline ? tender.deadline.slice(0,16) : ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
-          </div>
-        </div>
-        <div>
-          <label class="block text-sm text-slate-300 mb-1">Issuing Authority</label>
-          <input id="et-authority" type="text" value="${tender.issuing_authority || ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
-        </div>
-        <div>
-          <label class="block text-sm text-slate-300 mb-1">Description</label>
-          <textarea id="et-desc" rows="3" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm resize-none">${tender.description || ''}</textarea>
-        </div>
-        <div>
-          <label class="block text-sm text-slate-300 mb-1">Status</label>
-          <select id="et-status" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
-            ${['draft','analyzing','in_progress','review','approved'].map(s => `<option value="${s}" ${tender.status === s ? 'selected' : ''}>${s.replace(/_/g,' ')}</option>`).join('')}
-          </select>
-        </div>
+  modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+    <h3 class="text-lg font-semibold text-white mb-4">Edit Tender</h3>
+    <div id="et-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
+    <div class="space-y-4">
+      <div><label class="block text-sm text-slate-300 mb-1">Title *</label>
+        <input id="et-title" type="text" value="${tender.title}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm text-slate-300 mb-1">Reference</label>
+          <input id="et-ref" type="text" value="${tender.reference_number || ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+        <div><label class="block text-sm text-slate-300 mb-1">Deadline</label>
+          <input id="et-deadline" type="datetime-local" value="${tender.deadline ? tender.deadline.slice(0,16) : ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
       </div>
-      <div class="flex gap-3 mt-6">
-        <button id="et-submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Save Changes</button>
-        <button id="et-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
-      </div>
-    </div>`;
-
+      <div><label class="block text-sm text-slate-300 mb-1">Issuing Authority</label>
+        <input id="et-authority" type="text" value="${tender.issuing_authority || ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Description</label>
+        <textarea id="et-desc" rows="3" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm resize-none">${tender.description || ''}</textarea></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Status</label>
+        <select id="et-status" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+          ${['draft','analyzing','in_progress','review','approved'].map(s => `<option value="${s}" ${tender.status === s ? 'selected' : ''}>${s.replace(/_/g,' ')}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button id="et-submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Save Changes</button>
+      <button id="et-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
+    </div>
+  </div>`;
   document.body.appendChild(modal);
   modal.querySelector('#et-cancel').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-
   modal.querySelector('#et-submit').addEventListener('click', async () => {
-    const errEl = modal.querySelector('#edit-tender-error');
+    const errEl = modal.querySelector('#et-error');
     const title = modal.querySelector('#et-title').value.trim();
     if (!title) { errEl.textContent = 'Title is required.'; errEl.classList.remove('hidden'); return; }
-
     const { error } = await supabase.from('tenders').update({
       title,
       reference_number: modal.querySelector('#et-ref').value.trim() || null,
@@ -780,10 +759,8 @@ window._editTender = async (tenderId) => {
       description: modal.querySelector('#et-desc').value.trim() || null,
       status: modal.querySelector('#et-status').value,
     }).eq('id', tenderId);
-
     if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return; }
-    modal.remove();
-    window.TF?.toast?.('Tender updated', 'success');
+    modal.remove(); window.TF?.toast?.('Tender updated', 'success');
     const route = getCurrentRoute(); if (route) renderView(route);
   });
 };
@@ -796,4 +773,190 @@ window._deleteTender = async (tenderId) => {
   if (error) { window.TF?.toast?.(`Delete failed: ${error.message}`, 'error'); return; }
   window.TF?.toast?.('Tender deleted', 'success');
   navigate('/tenders');
+};
+
+// ── User Management ──────────────────────────────────────────────────────────
+window._toggleUser = async (userId, active) => {
+  await supabase.from('profiles').update({ is_active: active }).eq('id', userId);
+  window.TF?.toast?.(active ? 'User activated' : 'User suspended', 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
+};
+
+window._editUser = async (userId) => {
+  const { data: u } = await supabase.from('profiles').select('*').eq('id', userId).single();
+  if (!u) return;
+  const departments = await getDepartments();
+  const deptOptions = departments.map(d => `<option value="${d}" ${u.department === d ? 'selected' : ''}>${d}</option>`).join('');
+  const roleOptions = ['dept_user', 'bid_manager', 'it_admin', ...(isSuperAdmin() ? ['super_admin'] : [])]
+    .map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r.replace(/_/g, ' ')}</option>`).join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+    <h3 class="text-lg font-semibold text-white mb-4">Edit User</h3>
+    <div class="space-y-4">
+      <div><label class="block text-sm text-slate-300 mb-1">Full Name</label>
+        <input id="eu-name" type="text" value="${u.full_name}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Role</label>
+        <select id="eu-role" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">${roleOptions}</select></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Department</label>
+        <select id="eu-dept" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+          <option value="">— None —</option>${deptOptions}
+        </select></div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button id="eu-submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Save</button>
+      <button id="eu-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#eu-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('#eu-submit').addEventListener('click', async () => {
+    const { error } = await supabase.from('profiles').update({
+      full_name: modal.querySelector('#eu-name').value.trim(),
+      role: modal.querySelector('#eu-role').value,
+      department: modal.querySelector('#eu-dept').value || null,
+    }).eq('id', userId);
+    if (error) { window.TF?.toast?.(`Update failed: ${error.message}`, 'error'); return; }
+    modal.remove(); window.TF?.toast?.('User updated', 'success');
+    const route = getCurrentRoute(); if (route) renderView(route);
+  });
+};
+
+window._manageDepartments = async () => {
+  const departments = await getDepartments();
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+    <h3 class="text-lg font-semibold text-white mb-4">Manage Departments</h3>
+    <div id="dept-list" class="space-y-2 mb-4 max-h-64 overflow-y-auto">
+      ${departments.length > 0 ? departments.map(d => `
+        <div class="flex items-center justify-between px-3 py-2 bg-surface-900/60 rounded-lg">
+          <span class="text-sm text-white">${d}</span>
+          <button onclick="window._renameDepartment('${d}')" class="text-xs text-brand-400 hover:text-brand-300">Rename</button>
+        </div>`).join('') : '<p class="text-sm text-slate-500 px-3">No departments yet.</p>'}
+    </div>
+    <div class="flex gap-2 mb-4">
+      <input id="new-dept-input" type="text" placeholder="New department name" class="flex-1 px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+      <button id="add-dept-btn" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Add</button>
+    </div>
+    <button id="dept-close" class="w-full py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg hover:bg-slate-700/20">Close</button>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#dept-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('#add-dept-btn').addEventListener('click', () => {
+    const name = modal.querySelector('#new-dept-input').value.trim();
+    if (!name) return;
+    const item = document.createElement('div');
+    item.className = 'flex items-center justify-between px-3 py-2 bg-surface-900/60 rounded-lg';
+    item.innerHTML = `<span class="text-sm text-white">${name}</span><button onclick="window._renameDepartment('${name}')" class="text-xs text-brand-400 hover:text-brand-300">Rename</button>`;
+    modal.querySelector('#dept-list').appendChild(item);
+    modal.querySelector('#new-dept-input').value = '';
+    window.TF?.toast?.(`Department "${name}" added — assign it to users to activate`, 'info');
+  });
+};
+
+window._renameDepartment = async (oldName) => {
+  const newName = prompt(`Rename "${oldName}" to:`, oldName);
+  if (!newName || newName === oldName) return;
+  const profile = getProfile();
+  await supabase.from('profiles').update({ department: newName }).eq('department', oldName).eq('company_id', _selectedCompanyId || profile.company_id);
+  window.TF?.toast?.(`Department renamed to "${newName}"`, 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
+};
+
+window._createUser = async () => {
+  const profile = getProfile();
+  const departments = await getDepartments();
+  const deptOptions = departments.map(d => `<option value="${d}">${d}</option>`).join('');
+  const roleOptions = isSuperAdmin()
+    ? '<option value="dept_user">Dept User</option><option value="bid_manager">Bid Manager</option><option value="it_admin">IT Admin</option>'
+    : '<option value="dept_user">Dept User</option><option value="bid_manager">Bid Manager</option>';
+  let companySelect = '';
+  if (isSuperAdmin()) {
+    const { data: companies } = await supabase.from('companies').select('id, name').eq('is_active', true).order('name');
+    companySelect = `<div><label class="block text-sm text-slate-300 mb-1">Company *</label>
+      <select id="nu-company" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+        <option value="">— Select —</option>
+        ${(companies || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+      </select></div>`;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+    <h3 class="text-lg font-semibold text-white mb-4">Add New User</h3>
+    <div id="nu-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
+    <div id="nu-success" class="hidden mb-3 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm"></div>
+    <div class="space-y-4">
+      <div><label class="block text-sm text-slate-300 mb-1">Full Name *</label>
+        <input id="nu-name" type="text" placeholder="Jane Doe" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Email *</label>
+        <input id="nu-email" type="email" placeholder="jane@company.com" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Temporary Password *</label>
+        <input id="nu-password" type="text" placeholder="Min 8 characters" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm font-mono" /></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm text-slate-300 mb-1">Role</label>
+          <select id="nu-role" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">${roleOptions}</select></div>
+        <div><label class="block text-sm text-slate-300 mb-1">Department</label>
+          <select id="nu-dept" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+            <option value="">— None —</option>${deptOptions}
+          </select></div>
+      </div>
+      ${companySelect}
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button id="nu-submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Create User</button>
+      <button id="nu-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#nu-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('#nu-submit').addEventListener('click', async () => {
+    const errEl = modal.querySelector('#nu-error');
+    const successEl = modal.querySelector('#nu-success');
+    errEl.classList.add('hidden'); successEl.classList.add('hidden');
+    const name = modal.querySelector('#nu-name').value.trim();
+    const email = modal.querySelector('#nu-email').value.trim();
+    const password = modal.querySelector('#nu-password').value.trim();
+    const role = modal.querySelector('#nu-role').value;
+    const dept = modal.querySelector('#nu-dept').value;
+    const companyId = isSuperAdmin() ? modal.querySelector('#nu-company')?.value : (_selectedCompanyId || profile.company_id);
+    if (!name || !email || !password) { errEl.textContent = 'Name, email and password required.'; errEl.classList.remove('hidden'); return; }
+    if (password.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.classList.remove('hidden'); return; }
+    if (isSuperAdmin() && !companyId) { errEl.textContent = 'Please select a company.'; errEl.classList.remove('hidden'); return; }
+    const btn = modal.querySelector('#nu-submit'); btn.disabled = true; btn.textContent = 'Creating...';
+    const { data, error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: name, role } });
+    if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Create User'; return; }
+    if (data.user) {
+      await supabase.from('profiles').update({ full_name: name, role, department: dept || null, company_id: companyId || null }).eq('id', data.user.id);
+    }
+    successEl.textContent = `User "${name}" created successfully. They can log in with their email and temporary password.`;
+    successEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Create User';
+    window.TF?.toast?.(`User "${name}" created`, 'success');
+    setTimeout(() => { modal.remove(); const route = getCurrentRoute(); if (route) renderView(route); }, 2000);
+  });
+};
+
+// ── Task Actions ─────────────────────────────────────────────────────────────
+window._approveTask = async (taskId) => {
+  await supabase.from('tasks').update({ status: 'approved' }).eq('id', taskId);
+  window.TF?.toast?.('Task approved', 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
+};
+
+window._requestRevision = async (taskId) => {
+  const notes = prompt('Revision notes (optional):');
+  await supabase.from('tasks').update({ status: 'revision_needed', review_notes: notes || null }).eq('id', taskId);
+  window.TF?.toast?.('Revision requested', 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
+};
+
+window._startTask = async (taskId) => {
+  await supabase.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString() }).eq('id', taskId);
+  window.TF?.toast?.('Task started', 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
 };
