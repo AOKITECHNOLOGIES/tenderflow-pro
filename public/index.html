@@ -423,11 +423,11 @@
     // ── Boot ──────────────────────────────────────────────────────────────────
     initAuth();
 
+    // SW disabled during development
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then((reg) => console.log('[SW] Registered:', reg.scope))
-        .catch((err) => console.error('[SW] Registration failed:', err));
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) registration.unregister();
+      });
     }
 
     // Fallback: if loading screen is still showing after 4s, check session
