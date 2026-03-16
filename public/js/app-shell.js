@@ -177,7 +177,7 @@ const views = {
   async dashboard() {
     const profile = getProfile();
     const companyFilter = isSuperAdmin() && _viewScope === 'global'
-      ? {} : { company_id: profile.company_id || _selectedCompanyId };
+  ? {} : { company_id: _selectedCompanyId || profile.company_id };
 
     // Fetch stats
     const [tenders, tasks, myTasks] = await Promise.all([
@@ -249,8 +249,8 @@ const views = {
       .order('created_at', { ascending: false });
 
     if (!(isSuperAdmin() && _viewScope === 'global')) {
-      query.eq('company_id', profile.company_id || _selectedCompanyId);
-    }
+  query.eq('company_id', _selectedCompanyId || profile.company_id);
+}
     const { data: tenders } = await query;
 
     let html = `
