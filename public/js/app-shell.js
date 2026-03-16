@@ -849,10 +849,12 @@ window._setScope = (scope) => {
   if (route) renderView(route);
 };
 
-window._selectCompany = (id) => {
+window._selectCompany = async (id) => {
   _selectedCompanyId = id || null;
   const route = getCurrentRoute();
-  if (route) renderView(route);
+  if (!route) return;
+  if (!_selectedCompanyId) return; // Don't render until a company is actually selected
+  await renderView(route);
 };
 
 window._toggleCompany = async (id, active) => {
