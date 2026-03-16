@@ -845,12 +845,14 @@ window._logout = async () => { await logout(); navigate('/login'); };
 window._setScope = (scope) => {
   _viewScope = scope;
   document.getElementById('scope-company-select')?.classList.toggle('hidden', scope !== 'company');
-  renderView(getCurrentRoute());
+  const route = getCurrentRoute();
+  if (route) renderView(route);
 };
 
 window._selectCompany = (id) => {
   _selectedCompanyId = id || null;
-  renderView(getCurrentRoute());
+  const route = getCurrentRoute();
+  if (route) renderView(route);
 };
 
 window._toggleCompany = async (id, active) => {
