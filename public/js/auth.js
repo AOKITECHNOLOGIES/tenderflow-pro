@@ -44,7 +44,7 @@ export function initAuth() {
       // So: if we have a session, wait 200ms — if SIGNED_IN doesn't fire, handle it here.
       if (session) {
         _initialSessionTimer = setTimeout(async () => {
-  console.log('[Auth] INITIAL_SESSION timer fired, _sessionInitialized:', _sessionInitialized);
+  
           // SIGNED_IN did not follow — this is a page refresh, handle it ourselves
           if (_sessionInitialized) return; // SIGNED_IN already handled it
 
