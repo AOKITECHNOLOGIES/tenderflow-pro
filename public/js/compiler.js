@@ -218,11 +218,11 @@ export async function extractTextFromFile(file) {
   if (file.type === 'application/pdf') {
     console.log('[PDF] Starting extraction:', file.name, file.size);
     try {
-      const { GlobalWorkerOptions, getDocument } = await import('https://esm.sh/pdfjs-dist@3.11.174');
-      GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+      const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
+      const pdfjs = pdfjsLib.default || pdfjsLib;
+      pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const arrayBuffer = await file.arrayBuffer();
-      console.log('[PDF] ArrayBuffer size:', arrayBuffer.byteLength);
-      const pdf = await getDocument({ data: arrayBuffer }).promise;
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
       console.log('[PDF] Loaded, pages:', pdf.numPages);
       let fullText = '';
       for (let i = 1; i <= pdf.numPages; i++) {
