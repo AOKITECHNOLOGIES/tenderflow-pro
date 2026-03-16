@@ -22,7 +22,13 @@ export function onAuthChange(callback) {
   };
 }
 
+let _lastSignedInAt = 0;
 function _notifyListeners(event, profile) {
+  if (event === 'SIGNED_IN') {
+    const now = Date.now();
+    if (now - _lastSignedInAt < 2000) return; // Ignore if fired within 2 seconds
+    _lastSignedInAt = now;
+  }
   _authListeners.forEach((cb) => cb(event, profile));
 }
 
