@@ -274,6 +274,10 @@ const views = {
           </div>
         </div>
         <div class="flex gap-2">
+          ${!isLocked && hasRoleLevel('it_admin') ? `
+            <button onclick="window._editTender('${id}')" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">Edit</button>
+            <button onclick="window._deleteTender('${id}')" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition">Delete</button>
+          ` : ''}
           ${!isLocked && hasRoleLevel('bid_manager') ? `<a href="#/tenders/${id}/compile" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition">Compile & Submit</a>` : ''}
         </div>
       </div>
@@ -713,3 +717,81 @@ document.addEventListener('input', (e) => {
     }, 1500);
   }
 });
+window._editTender = async (tenderId) => {
+  const { data: tender } = await supabase.from('tenders').select('*').eq('id', tenderId).single();
+  if (!tender) return;
+
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  modal.innerHTML = `
+    <div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+      <h3 class="text-lg font-semibold text-white mb-4">Edit Tender</h3>
+      <div id="edit-tender-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-slate-300 mb-1">Title *</label>
+          <input id="et-title" type="text" value="${tender.title}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-slate-300 mb-1">Reference Number</label>
+            <input id="et-ref" type="text" value="${tender.reference_number || ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-300 mb-1">Deadline</label>
+            <input id="et-deadline" type="datetime-local" value="${tender.deadline ? tender.deadline.slice(0,16) : ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-300 mb-1">Issuing Authority</label>
+          <input id="et-authority" type="text" value="${tender.issuing_authority || ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-300 mb-1">Description</label>
+          <textarea id="et-desc" rows="3" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm resize-none">${tender.description || ''}</textarea>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-300 mb-1">Status</label>
+          <select id="et-status" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+            ${['draft','analyzing','in_progress','review','approved'].map(s => `<option value="${s}" ${tender.status === s ? 'selected' : ''}>${s.replace(/_/g,' ')}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button id="et-submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Save Changes</button>
+        <button id="et-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+  modal.querySelector('#et-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  modal.querySelector('#et-submit').addEventListener('click', async () => {
+    const errEl = modal.querySelector('#edit-tender-error');
+    const title = modal.querySelector('#et-title').value.trim();
+    if (!title) { errEl.textContent = 'Title is required.'; errEl.classList.remove('hidden'); return; }
+
+    const { error } = await supabase.from('tenders').update({
+      title,
+      reference_number: modal.querySelector('#et-ref').value.trim() || null,
+      deadline: modal.querySelector('#et-deadline').value || null,
+      issuing_authority: modal.querySelector('#et-authority').value.trim() || null,
+      description: modal.querySelector('#et-desc').value.trim() || null,
+      status: modal.querySelector('#et-status').value,
+    }).eq('id', tenderId);
+
+    if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return; }
+    modal.remove();
+    window.TF?.toast?.('Tender updated', 'success');
+    const route = getCurrentRoute(); if (route) renderView(route);
+  });
+};
+
+window._deleteTender = async (tenderId) => {
+  if (!confirm('Delete this tender? This will also delete all tasks and documents. This cannot be undone.')) return;
+  const { error } = await supabase.from('tenders').delete().eq('id', tenderId);
+  if (error) { window.TF?.toast?.(`Delete failed: ${error.message}`, 'error'); return; }
+  window.TF?.toast?.('Tender deleted', 'success');
+  navigate('/tenders');
+};
