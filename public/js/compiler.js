@@ -283,8 +283,14 @@ export async function triggerRFQAnalysis(tenderId, fileText) {
     body: { tender_id: tenderId, document_text: fileText },
   });
 
+  console.log('[AI] Response:', JSON.stringify(response));
+
   if (response.error) {
     throw new Error(response.error.message || 'AI analysis failed');
+  }
+
+  if (!response.data || !response.data.success) {
+    throw new Error(response.data?.error || 'AI analysis returned no data');
   }
 
   return response.data;
@@ -295,7 +301,9 @@ export async function triggerRFQAnalysis(tenderId, fileText) {
 export async function extractTextFromFile(file) {
   // For PDF: use pdf.js
   if (file.type === 'application/pdf') {
+    console.log('[PDF] Starting extraction for:', file.name, file.type, file.size);
     const pdfjsLib = await import('https://esm.sh/pdfjs-dist@3.11.174/build/pdf.mjs');
+    console.log('[PDF] pdfjsLib loaded');
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@3.11.174/build/pdf.worker.mjs';
 
     const arrayBuffer = await file.arrayBuffer();
