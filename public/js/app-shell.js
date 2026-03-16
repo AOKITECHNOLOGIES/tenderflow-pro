@@ -790,6 +790,8 @@ window._editTender = async (tenderId) => {
 
 window._deleteTender = async (tenderId) => {
   if (!confirm('Delete this tender? This will also delete all tasks and documents. This cannot be undone.')) return;
+  await supabase.from('tasks').delete().eq('tender_id', tenderId);
+  await supabase.from('documents').delete().eq('tender_id', tenderId);
   const { error } = await supabase.from('tenders').delete().eq('id', tenderId);
   if (error) { window.TF?.toast?.(`Delete failed: ${error.message}`, 'error'); return; }
   window.TF?.toast?.('Tender deleted', 'success');
