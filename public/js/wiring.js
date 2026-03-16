@@ -68,7 +68,7 @@ window.addEventListener('hashchange', _origHashHandler);
 // 2. DYNAMIC EVENT HANDLERS — attached after each view render
 // ============================================================================
 
-function attachDynamicHandlers(route) {
+export function attachDynamicHandlers(route) {
   switch (route.view) {
     case 'tender-create':
       attachTenderCreateHandlers();
