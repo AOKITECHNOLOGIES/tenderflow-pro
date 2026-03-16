@@ -413,7 +413,11 @@
         return;
       }
       // Shell is ready — render the view
-      import('./js/wiring.js').then(m => m.attachDynamicHandlers(route));
+      renderView(route).then(() => {
+        import('./js/wiring.js').then(({ attachDynamicHandlers }) => {
+          if (attachDynamicHandlers) attachDynamicHandlers(route);
+        });
+      });
     });
 
     // ── Boot ──────────────────────────────────────────────────────────────────
