@@ -35,7 +35,7 @@ function _notifyListeners(event, profile) {
 // ── Initialize Auth Listener ─────────────────────────────────────────────────
 export function initAuth() {
   supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log('[Auth] State change:', event);
+    console.log('[Auth] INITIAL_SESSION timer fired, _sessionInitialized:', _sessionInitialized);
 
     if (event === 'INITIAL_SESSION') {
       // Supabase fires INITIAL_SESSION on every page load.
