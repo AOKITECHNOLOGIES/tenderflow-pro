@@ -204,11 +204,9 @@ export async function triggerRFQAnalysis(tenderId, fileText) {
   const response = await supabase.functions.invoke('parse-rfq', {
     body: { tender_id: tenderId, document_text: fileText },
     headers: {
-      Authorization: `Bearer ${session.access_token}`,  // 👈 add this
+      Authorization: `Bearer ${session.access_token}`,
     },
   });
-  // ... rest stays the same
-}
 
   console.log('[AI] Response:', JSON.stringify(response));
 
@@ -223,12 +221,9 @@ export async function extractTextFromFile(file) {
   if (file.type === 'application/pdf') {
     console.log('[PDF] Starting extraction:', file.name, file.size);
     try {
-      // Use the UMD global loaded via <script> tag in index.html.
-      // Dynamic ESM import of pdfjs-dist does NOT reliably expose GlobalWorkerOptions.
       const pdfjs = window.pdfjsLib;
       if (!pdfjs) throw new Error('PDF.js not loaded — ensure the script tag is present in index.html');
 
-      // Worker must be set before any getDocument() call
       if (!pdfjs.GlobalWorkerOptions.workerSrc) {
         pdfjs.GlobalWorkerOptions.workerSrc =
           'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
