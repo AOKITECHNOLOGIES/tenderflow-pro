@@ -203,7 +203,12 @@ export async function triggerRFQAnalysis(tenderId, fileText) {
 
   const response = await supabase.functions.invoke('parse-rfq', {
     body: { tender_id: tenderId, document_text: fileText },
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,  // 👈 add this
+    },
   });
+  // ... rest stays the same
+}
 
   console.log('[AI] Response:', JSON.stringify(response));
 
