@@ -358,6 +358,13 @@ const views = {
         </div>
       </div>
       ${task.description ? `<p class="text-sm text-slate-400">${task.description}</p>` : ''}
+      ${hasRoleLevel('bid_manager') && !isLocked ? `<div class="bg-surface-800/40 border border-slate-700/40 rounded-xl p-5">
+        <h2 class="text-sm font-semibold text-white mb-4">Assignment & Settings</h2>
+        <div id="task-assign-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
+        <div id="task-assign-fields" class="space-y-3">
+          <div class="shimmer h-8 rounded"></div>
+        </div>
+      </div>` : ''}
       <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
         <div class="px-5 py-3 border-b border-slate-700/40 flex items-center justify-between">
           <h2 class="text-sm font-semibold text-white">Section Content</h2>
@@ -958,5 +965,63 @@ window._requestRevision = async (taskId) => {
 window._startTask = async (taskId) => {
   await supabase.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString() }).eq('id', taskId);
   window.TF?.toast?.('Task started', 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
+};
+window._loadTaskAssignFields = async (taskId) => {
+  const container = document.getElementById('task-assign-fields');
+  if (!container) return;
+  const profile = getProfile();
+  const { data: users } = await supabase.from('profiles')
+    .select('id, full_name, department')
+    .eq('company_id', _selectedCompanyId || profile.company_id)
+    .eq('is_active', true).order('full_name');
+  const { data: task } = await supabase.from('tasks')
+    .select('assigned_to, due_date, priority, is_mandatory')
+    .eq('id', taskId).single();
+  const userOptions = (users || []).map(u =>
+    `<option value="${u.id}" ${task?.assigned_to === u.id ? 'selected' : ''}>${u.full_name}${u.department ? ` (${u.department})` : ''}</option>`
+  ).join('');
+  container.innerHTML = `
+    <div><label class="block text-xs text-slate-400 mb-1">Assigned To</label>
+      <select id="ta-assign" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+        <option value="">— Unassigned —</option>${userOptions}
+      </select></div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-xs text-slate-400 mb-1">Priority</label>
+        <select id="ta-priority" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+          <option value="0" ${task?.priority === 0 ? 'selected' : ''}>Normal</option>
+          <option value="1" ${task?.priority === 1 ? 'selected' : ''}>High</option>
+          <option value="2" ${task?.priority === 2 ? 'selected' : ''}>Critical</option>
+        </select></div>
+      <div><label class="block text-xs text-slate-400 mb-1">Due Date</label>
+        <input id="ta-due" type="datetime-local" value="${task?.due_date ? task.due_date.slice(0,16) : ''}"
+          class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+    </div>
+    <label class="flex items-center gap-2 text-sm text-slate-300">
+      <input id="ta-mandatory" type="checkbox" ${task?.is_mandatory ? 'checked' : ''} /> Mandatory
+    </label>
+    <button onclick="window._saveTaskAssignment('${taskId}')" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium rounded-lg transition">Save Assignment</button>`;
+};
+
+window._saveTaskAssignment = async (taskId) => {
+  const assignTo = document.getElementById('ta-assign')?.value || null;
+  const priority = parseInt(document.getElementById('ta-priority')?.value) || 0;
+  const dueDate = document.getElementById('ta-due')?.value || null;
+  const isMandatory = document.getElementById('ta-mandatory')?.checked || false;
+  const profile = getProfile();
+  const { error } = await supabase.from('tasks').update({
+    assigned_to: assignTo || null,
+    assigned_by: assignTo ? profile.id : null,
+    priority,
+    due_date: dueDate || null,
+    is_mandatory: isMandatory,
+    status: assignTo ? 'assigned' : 'unassigned',
+  }).eq('id', taskId);
+  if (error) {
+    const errEl = document.getElementById('task-assign-error');
+    if (errEl) { errEl.textContent = error.message; errEl.classList.remove('hidden'); }
+    return;
+  }
+  window.TF?.toast?.('Task assignment saved', 'success');
   const route = getCurrentRoute(); if (route) renderView(route);
 };

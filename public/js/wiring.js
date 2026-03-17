@@ -120,7 +120,7 @@ window._addTask = async (tenderId) => {
 };
 
 // ── Task Detail ──────────────────────────────────────────────────────────────
-function attachTaskDetailHandlers() { const {id} = getRouteParams(); loadTaskDocuments(id); }
+function attachTaskDetailHandlers() { const {id} = getRouteParams(); loadTaskDocuments(id); window._loadTaskAssignFields(id); }
 
 async function loadTaskDocuments(taskId) {
   const listEl = document.getElementById('task-documents-list');
