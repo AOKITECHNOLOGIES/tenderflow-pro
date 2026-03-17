@@ -1190,7 +1190,9 @@ window._importDocument = async (tenderId) => {
       btn.disabled = false; btn.textContent = 'Import & Parse';
     }
   });
-  // ── User Delete ──────────────────────────────────────────────────────────────
+};
+
+// ── User Delete ──────────────────────────────────────────────────────────────
 window._deleteUserPrompt = async (userId, userName) => {
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
@@ -1282,5 +1284,4 @@ window._bulkDeleteTasks = async (tenderId) => {
   }
   window.TF?.toast?.(`${ids.length} task(s) deleted`, 'success');
   const route = getCurrentRoute(); if (route) renderView(route);
-};
 };
