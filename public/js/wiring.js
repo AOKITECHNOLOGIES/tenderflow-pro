@@ -172,26 +172,6 @@ async function renderCompileView(tenderId, container) {
 }
 
 // ── User/Company Management ──────────────────────────────────────────────────
-window._createUser = async () => {
-  const profile = getProfile();
-  const roleOptions = isSuperAdmin() ? '<option value="dept_user">Dept User</option><option value="bid_manager">Bid Manager</option><option value="it_admin">IT Admin</option>' : '<option value="dept_user">Dept User</option><option value="bid_manager">Bid Manager</option>';
-  let companySelect = '';
-  if (isSuperAdmin()) { const {data:companies}=await supabase.from('companies').select('id,name').eq('is_active',true).order('name'); companySelect=`<div><label class="block text-sm text-slate-300 mb-1">Company *</label><select id="nu-company" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm"><option value="">— Select —</option>${(companies||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>`; }
-  const modal = document.createElement('div'); modal.className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
-  modal.innerHTML=`<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl"><h3 class="text-lg font-semibold text-white mb-4">Invite New User</h3><div id="nu-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div><div id="nu-success" class="hidden mb-3 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm"></div><div class="space-y-4"><div><label class="block text-sm text-slate-300 mb-1">Email *</label><input id="nu-email" type="email" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div><div><label class="block text-sm text-slate-300 mb-1">Full Name *</label><input id="nu-name" type="text" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div><div class="grid grid-cols-2 gap-3"><div><label class="block text-sm text-slate-300 mb-1">Role</label><select id="nu-role" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">${roleOptions}</select></div><div><label class="block text-sm text-slate-300 mb-1">Department</label><input id="nu-dept" type="text" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div></div>${companySelect}</div><div class="flex gap-3 mt-6"><button id="nu-submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Send Invite</button><button id="nu-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button></div></div>`;
-  document.body.appendChild(modal);
-  modal.querySelector('#nu-cancel').addEventListener('click',()=>modal.remove());
-  modal.addEventListener('click',(e)=>{if(e.target===modal)modal.remove();});
-  modal.querySelector('#nu-submit').addEventListener('click', async()=>{
-    const errEl=modal.querySelector('#nu-error'); const successEl=modal.querySelector('#nu-success'); errEl.classList.add('hidden'); successEl.classList.add('hidden');
-    const email=modal.querySelector('#nu-email').value.trim(); const name=modal.querySelector('#nu-name').value.trim(); const role=modal.querySelector('#nu-role').value; const dept=modal.querySelector('#nu-dept').value.trim(); const companyId=isSuperAdmin()?modal.querySelector('#nu-company')?.value:profile.company_id;
-    if(!email||!name){errEl.textContent='Email and name required';errEl.classList.remove('hidden');return;} if(isSuperAdmin()&&!companyId){errEl.textContent='Select a company';errEl.classList.remove('hidden');return;}
-    const {data:company}=await supabase.from('companies').select('slug,name').eq('id',companyId).single();
-    successEl.innerHTML=`Invite for <strong>${name}</strong>:<br/><span class="font-mono text-xs">Email: ${email}</span><br/><span class="font-mono text-xs">Company Code: ${company?.slug||'—'}</span><br/><br/>After signup run:<br/><code class="text-xs bg-surface-900 px-2 py-1 rounded">UPDATE profiles SET role='${role}'${dept?`,department='${dept}'`:''} WHERE email='${email}';</code>`;
-    successEl.classList.remove('hidden'); window.TF?.toast?.('Invite details generated','success');
-  });
-};
-
 window._createCompany = async () => {
   if (!isSuperAdmin()) return;
   const modal = document.createElement('div'); modal.className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
