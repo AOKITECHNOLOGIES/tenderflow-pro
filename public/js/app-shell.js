@@ -975,9 +975,11 @@ window._loadTaskAssignFields = async (taskId) => {
     .select('id, full_name, department')
     .eq('company_id', _selectedCompanyId || profile.company_id)
     .eq('is_active', true).order('full_name');
-  const { data: task } = await supabase.from('tasks')
+  const { data: task, error: taskErr } = await supabase.from('tasks')
     .select('assigned_to, due_date, priority, is_mandatory')
-    .eq('id', taskId).single();
+    .eq('id', taskId)
+    .maybeSingle();
+  if (taskErr) { console.error('[Assign] Task fetch error:', taskErr.message); return; }
   const userOptions = (users || []).map(u =>
     `<option value="${u.id}" ${task?.assigned_to === u.id ? 'selected' : ''}>${u.full_name}${u.department ? ` (${u.department})` : ''}</option>`
   ).join('');
