@@ -979,9 +979,12 @@ window._loadTaskAssignFields = async (taskId) => {
   const container = document.getElementById('task-assign-fields');
   if (!container) return;
   const profile = getProfile();
+  // Get company_id from the task itself, not from view scope
+  const { data: taskRow } = await supabase.from('tasks').select('company_id').eq('id', taskId).maybeSingle();
+  const companyId = taskRow?.company_id || _selectedCompanyId || profile.company_id;
   const { data: users } = await supabase.from('profiles')
     .select('id, full_name, department')
-    .eq('company_id', _selectedCompanyId || profile.company_id)
+    .eq('company_id', companyId)
     .eq('is_active', true).order('full_name');
   const { data: task, error: taskErr } = await supabase.from('tasks')
     .select('assigned_to, due_date, priority, is_mandatory')
