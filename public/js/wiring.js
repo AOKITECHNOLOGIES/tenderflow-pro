@@ -72,7 +72,7 @@ function attachTenderCreateHandlers() {
       if (file && tender) {
         btn.textContent = 'Uploading RFQ...';
         const storagePath = `${profile.company_id}/${tender.id}/rfq_${file.name}`;
-        const { error: uploadErr } = await supabase.storage.from('tender-documents').upload(storagePath, file);
+        const { error: uploadErr } = await supabase.storage.from('tender-documents').upload(storagePath, file, { upsert: true });
         if (!uploadErr) {
           await supabase.from('documents').insert({ company_id: profile.company_id, tender_id: tender.id, uploaded_by: profile.id, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath, doc_type: 'rfq_source' });
           if (profile.companies?.ai_enabled) {
