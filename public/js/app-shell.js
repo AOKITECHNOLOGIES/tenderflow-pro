@@ -342,8 +342,10 @@ const views = {
   async 'task-detail'() {
     const { id } = getRouteParams();
     const { data: task } = await supabase.from('tasks')
-  .select('id, title, content, description, status, is_mandatory, review_notes, tender_id, assigned_to, priority, due_date, tenders(title, status)')
+  .select('id, title, content, description, status, is_mandatory, review_notes, tender_id, assigned_to, priority, due_date')
   .eq('id', id).single();
+const { data: taskTender } = await supabase.from('tenders').select('title, status').eq('id', task?.tender_id).maybeSingle();
+if (task) task.tenders = taskTender;
     if (!task) return '<div class="p-8 text-center text-slate-500">Task not found.</div>';
     const isLocked = ['submitted', 'archived'].includes(task.tenders?.status);
     const canEdit = !isLocked && (task.assigned_to === getProfile().id || hasRoleLevel('bid_manager'));
@@ -938,11 +940,23 @@ window._createUser = async () => {
     if (password.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.classList.remove('hidden'); return; }
     if (isSuperAdmin() && !companyId) { errEl.textContent = 'Please select a company.'; errEl.classList.remove('hidden'); return; }
     const btn = modal.querySelector('#nu-submit'); btn.disabled = true; btn.textContent = 'Creating...';
-    const { data, error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: name, role } });
+    const { data, error } = await supabase.auth.signUp({ 
+  email, 
+  password,
+  options: { data: { full_name: name, role } }
+});
     if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Create User'; return; }
     if (data.user) {
-      await supabase.from('profiles').update({ full_name: name, role, department: dept || null, company_id: companyId || null }).eq('id', data.user.id);
-    }
+  await supabase.from('profiles').upsert({ 
+    id: data.user.id,
+    full_name: name, 
+    role, 
+    department: dept || null, 
+    company_id: companyId || null,
+    email,
+    is_active: true,
+  });
+}
     successEl.textContent = `User "${name}" created successfully. They can log in with their email and temporary password.`;
     successEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Create User';
     window.TF?.toast?.(`User "${name}" created`, 'success');
