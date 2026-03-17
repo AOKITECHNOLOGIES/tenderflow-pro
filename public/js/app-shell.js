@@ -67,7 +67,10 @@ function statusBadge(status) {
 
 async function getDepartments() {
   const profile = getProfile();
-  const { data } = await supabase.from('profiles').select('department').eq('company_id', _selectedCompanyId || profile.company_id).not('department', 'is', null);
+  const companyId = _selectedCompanyId || profile.company_id;
+  let query = supabase.from('profiles').select('department').not('department', 'is', null);
+  if (companyId) query = query.eq('company_id', companyId);
+  const { data } = await query;
   return [...new Set((data || []).map(d => d.department).filter(Boolean))].sort();
 }
 
@@ -940,23 +943,12 @@ window._createUser = async () => {
     if (password.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.classList.remove('hidden'); return; }
     if (isSuperAdmin() && !companyId) { errEl.textContent = 'Please select a company.'; errEl.classList.remove('hidden'); return; }
     const btn = modal.querySelector('#nu-submit'); btn.disabled = true; btn.textContent = 'Creating...';
-    const { data, error } = await supabase.auth.signUp({ 
-  email, 
-  password,
-  options: { data: { full_name: name, role } }
-});
-    if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Create User'; return; }
-    if (data.user) {
-  await supabase.from('profiles').upsert({ 
-    id: data.user.id,
-    full_name: name, 
-    role, 
-    department: dept || null, 
-    company_id: companyId || null,
-    email,
-    is_active: true,
-  });
-}
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: { email, password, full_name: name, role, department: dept || null, company_id: companyId || null },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (error || !data?.success) { errEl.textContent = data?.error || error?.message || 'Failed to create user'; errEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Create User'; return; }
     successEl.textContent = `User "${name}" created successfully. They can log in with their email and temporary password.`;
     successEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Create User';
     window.TF?.toast?.(`User "${name}" created`, 'success');
