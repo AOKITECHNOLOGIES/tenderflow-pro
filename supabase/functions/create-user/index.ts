@@ -34,7 +34,16 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Insufficient permissions' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { email, password, full_name, role, department, company_id } = await req.json();
+    const body = await req.json();
+
+    // Handle delete action
+    if (body._action === 'delete' && body.user_id) {
+      const { error } = await adminClient.auth.admin.deleteUser(body.user_id);
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const { email, password, full_name, role, department, company_id } = body;
     if (!email || !password || !full_name) {
       return new Response(JSON.stringify({ error: 'email, password and full_name are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }

@@ -223,14 +223,21 @@ const views = {
     if (!(isSuperAdmin() && _viewScope === 'global')) query.eq('company_id', _selectedCompanyId || profile.company_id);
     const { data: tenders } = await query;
 
+    const canBulk = hasRoleLevel('it_admin');
     let html = `<div class="view-enter space-y-6">
       <div class="flex items-center justify-between">
         <h1 class="text-xl font-bold text-white">Tenders</h1>
         <a href="#/tenders/new" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">${icon('plus')} New Tender</a>
       </div>
+      ${canBulk ? `<div id="tender-bulk-bar" class="hidden items-center gap-3 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+        <span id="tender-bulk-count" class="text-xs text-red-400">0 selected</span>
+        <button onclick="window._bulkDeleteTenders()" class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg">Delete Selected</button>
+        <button onclick="window._clearTenderSelection()" class="text-xs text-slate-400 hover:text-slate-300">Clear</button>
+      </div>` : ''}
       <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
         <table class="w-full text-sm">
           <thead><tr class="border-b border-slate-700/40 text-left">
+            ${canBulk ? `<th class="px-4 py-3"><input type="checkbox" id="tender-select-all" onchange="window._toggleAllTenders(this.checked)" class="rounded" /></th>` : ''}
             <th class="px-5 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Title</th>
             <th class="px-5 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
             <th class="px-5 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Deadline</th>
@@ -240,15 +247,16 @@ const views = {
 
     if (tenders?.length > 0) {
       for (const t of tenders) {
-        html += `<tr class="hover:bg-slate-700/10 transition cursor-pointer" onclick="location.hash='#/tenders/${t.id}'">
-          <td class="px-5 py-3"><p class="text-white font-medium">${t.title}</p><p class="text-xs text-slate-500">${t.reference_number || 'No ref'}</p></td>
-          <td class="px-5 py-3">${statusBadge(t.status)}</td>
-          <td class="px-5 py-3 text-slate-400">${t.deadline ? new Date(t.deadline).toLocaleDateString() : '—'}</td>
-          <td class="px-5 py-3 text-slate-400">${t.profiles?.full_name || '—'}</td>
+        html += `<tr class="hover:bg-slate-700/10 transition">
+          ${canBulk ? `<td class="px-4 py-3"><input type="checkbox" class="tender-checkbox rounded" value="${t.id}" onchange="window._updateTenderBulkBar()" /></td>` : ''}
+          <td class="px-5 py-3 cursor-pointer" onclick="location.hash='#/tenders/${t.id}'"><p class="text-white font-medium">${t.title}</p><p class="text-xs text-slate-500">${t.reference_number || 'No ref'}</p></td>
+          <td class="px-5 py-3 cursor-pointer" onclick="location.hash='#/tenders/${t.id}'">${statusBadge(t.status)}</td>
+          <td class="px-5 py-3 text-slate-400 cursor-pointer" onclick="location.hash='#/tenders/${t.id}'">${t.deadline ? new Date(t.deadline).toLocaleDateString() : '—'}</td>
+          <td class="px-5 py-3 text-slate-400 cursor-pointer" onclick="location.hash='#/tenders/${t.id}'">${t.profiles?.full_name || '—'}</td>
         </tr>`;
       }
     } else {
-      html += `<tr><td colspan="4" class="px-5 py-8 text-center text-slate-500">No tenders found.</td></tr>`;
+      html += `<tr><td colspan="${canBulk ? 5 : 4}" class="px-5 py-8 text-center text-slate-500">No tenders found.</td></tr>`;
     }
     html += `</tbody></table></div></div>`;
     return html;
@@ -341,8 +349,14 @@ const views = {
               <button class="text-xs text-emerald-400 hover:text-emerald-300" onclick="window._importDocument('${id}')">↑ Import Document</button>
             </div>` : ''}
         </div>
+        ${!isLocked && hasRoleLevel('bid_manager') ? `<div id="task-bulk-bar" class="hidden items-center gap-3 px-4 py-2 mx-5 mb-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <span id="task-bulk-count" class="text-xs text-red-400">0 selected</span>
+          <button onclick="window._bulkDeleteTasks('${id}')" class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg">Delete Selected</button>
+          <button onclick="window._clearTaskSelection()" class="text-xs text-slate-400 hover:text-slate-300">Clear</button>
+        </div>` : ''}
         <table class="w-full text-sm">
           <thead><tr class="border-b border-slate-700/40">
+            ${!isLocked && hasRoleLevel('bid_manager') ? `<th class="px-4 py-2"><input type="checkbox" id="task-select-all" onchange="window._toggleAllTasks(this.checked)" class="rounded" /></th>` : ''}
             <th class="px-5 py-2 text-left text-xs text-slate-400 uppercase">Section</th>
             <th class="px-5 py-2 text-left text-xs text-slate-400 uppercase">Assigned To</th>
             <th class="px-5 py-2 text-left text-xs text-slate-400 uppercase">Status</th>
@@ -355,6 +369,7 @@ const views = {
       const priority = ['Normal', 'High', 'Critical'][task.priority] || 'Normal';
       const prioColor = ['text-slate-400', 'text-amber-400', 'text-red-400'][task.priority] || 'text-slate-400';
       html += `<tr class="hover:bg-slate-700/10">
+        ${!isLocked && hasRoleLevel('bid_manager') ? `<td class="px-4 py-3"><input type="checkbox" class="task-checkbox rounded" value="${task.id}" onchange="window._updateTaskBulkBar()" /></td>` : ''}
         <td class="px-5 py-3 cursor-pointer" onclick="location.hash='#/tasks/${task.id}'"><p class="text-white">${task.title}</p><p class="text-xs text-slate-500">${task.section_type || '—'}</p></td>
         <td class="px-5 py-3 text-slate-400 cursor-pointer" onclick="location.hash='#/tasks/${task.id}'">${task.profiles?.full_name || '<span class="text-slate-600">Unassigned</span>'}</td>
         <td class="px-5 py-3 cursor-pointer" onclick="location.hash='#/tasks/${task.id}'">${statusBadge(task.status)}</td>
@@ -364,7 +379,7 @@ const views = {
         </td>
       </tr>`;
     }
-    if (!tasks?.length) html += `<tr><td colspan="5" class="px-5 py-8 text-center text-slate-500">No tasks yet. Upload an RFQ for AI analysis or add manually.</td></tr>`;
+    if (!tasks?.length) html += `<tr><td colspan="${hasRoleLevel('bid_manager') && !isLocked ? 6 : 5}" class="px-5 py-8 text-center text-slate-500">No tasks yet. Upload an RFQ for AI analysis or add manually.</td></tr>`;
     html += `</tbody></table></div>`;
 
     html += buildLivePreview(tender, tasks);
@@ -590,6 +605,7 @@ const views = {
         <td class="px-5 py-3 flex gap-2">
           <button onclick="window._editUser('${u.id}')" class="text-xs text-brand-400 hover:text-brand-300">Edit</button>
           <button onclick="window._toggleUser('${u.id}', ${!u.is_active})" class="text-xs ${u.is_active ? 'text-red-400 hover:text-red-300' : 'text-emerald-400 hover:text-emerald-300'}">${u.is_active ? 'Suspend' : 'Activate'}</button>
+          ${hasRoleLevel('it_admin') ? `<button onclick="window._deleteUserPrompt('${u.id}', '${u.full_name}')" class="text-xs text-red-500 hover:text-red-400">Delete</button>` : ''}
         </td>
       </tr>`;
     }
@@ -1174,4 +1190,97 @@ window._importDocument = async (tenderId) => {
       btn.disabled = false; btn.textContent = 'Import & Parse';
     }
   });
+  // ── User Delete ──────────────────────────────────────────────────────────────
+window._deleteUserPrompt = async (userId, userName) => {
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <h3 class="text-lg font-semibold text-white mb-2">Delete User</h3>
+    <p class="text-sm text-slate-400 mb-6">Choose how to remove <strong class="text-white">${userName}</strong>:</p>
+    <div class="flex flex-col gap-3">
+      <button id="du-soft" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg">Deactivate (keeps data, blocks login)</button>
+      <button id="du-hard" class="px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg">Permanently Delete (cannot be undone)</button>
+      <button id="du-cancel" class="px-5 py-2.5 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#du-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('#du-soft').addEventListener('click', async () => {
+    await supabase.from('profiles').update({ is_active: false }).eq('id', userId);
+    modal.remove(); window.TF?.toast?.(`${userName} deactivated`, 'success');
+    const route = getCurrentRoute(); if (route) renderView(route);
+  });
+  modal.querySelector('#du-hard').addEventListener('click', async () => {
+    if (!confirm(`Permanently delete ${userName}? This cannot be undone.`)) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    await supabase.functions.invoke('create-user', {
+      body: { _action: 'delete', user_id: userId },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    await supabase.from('profiles').delete().eq('id', userId);
+    modal.remove(); window.TF?.toast?.(`${userName} permanently deleted`, 'success');
+    const route = getCurrentRoute(); if (route) renderView(route);
+  });
+};
+
+// ── Bulk Tender Actions ───────────────────────────────────────────────────────
+window._toggleAllTenders = (checked) => {
+  document.querySelectorAll('.tender-checkbox').forEach(cb => cb.checked = checked);
+  window._updateTenderBulkBar();
+};
+window._updateTenderBulkBar = () => {
+  const checked = document.querySelectorAll('.tender-checkbox:checked');
+  const bar = document.getElementById('tender-bulk-bar');
+  const count = document.getElementById('tender-bulk-count');
+  if (bar) { bar.classList.toggle('hidden', checked.length === 0); bar.classList.toggle('flex', checked.length > 0); }
+  if (count) count.textContent = `${checked.length} selected`;
+};
+window._clearTenderSelection = () => {
+  document.querySelectorAll('.tender-checkbox').forEach(cb => cb.checked = false);
+  const selectAll = document.getElementById('tender-select-all');
+  if (selectAll) selectAll.checked = false;
+  window._updateTenderBulkBar();
+};
+window._bulkDeleteTenders = async () => {
+  const ids = [...document.querySelectorAll('.tender-checkbox:checked')].map(cb => cb.value);
+  if (!ids.length) return;
+  if (!confirm(`Permanently delete ${ids.length} tender(s) and all their tasks? This cannot be undone.`)) return;
+  for (const id of ids) {
+    await supabase.from('tasks').delete().eq('tender_id', id);
+    await supabase.from('documents').delete().eq('tender_id', id);
+    await supabase.from('tenders').delete().eq('id', id);
+  }
+  window.TF?.toast?.(`${ids.length} tender(s) deleted`, 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
+};
+
+// ── Bulk Task Actions ─────────────────────────────────────────────────────────
+window._toggleAllTasks = (checked) => {
+  document.querySelectorAll('.task-checkbox').forEach(cb => cb.checked = checked);
+  window._updateTaskBulkBar();
+};
+window._updateTaskBulkBar = () => {
+  const checked = document.querySelectorAll('.task-checkbox:checked');
+  const bar = document.getElementById('task-bulk-bar');
+  const count = document.getElementById('task-bulk-count');
+  if (bar) { bar.classList.toggle('hidden', checked.length === 0); bar.classList.toggle('flex', checked.length > 0); }
+  if (count) count.textContent = `${checked.length} selected`;
+};
+window._clearTaskSelection = () => {
+  document.querySelectorAll('.task-checkbox').forEach(cb => cb.checked = false);
+  const selectAll = document.getElementById('task-select-all');
+  if (selectAll) selectAll.checked = false;
+  window._updateTaskBulkBar();
+};
+window._bulkDeleteTasks = async (tenderId) => {
+  const ids = [...document.querySelectorAll('.task-checkbox:checked')].map(cb => cb.value);
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} task(s)? This cannot be undone.`)) return;
+  for (const id of ids) {
+    await supabase.from('tasks').delete().eq('id', id);
+  }
+  window.TF?.toast?.(`${ids.length} task(s) deleted`, 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
+};
 };
