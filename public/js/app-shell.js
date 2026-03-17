@@ -138,9 +138,13 @@ function buildLivePreview(tender, tasks) {
   });
   const sectionsHtml = sorted.map((task, i) => {
     if (task.status === 'approved' && task.content) {
+      const imgs = (task.images || []).map(img =>
+        `<img src="${img.url}" alt="${img.name}" style="max-width:100%;margin:8px 0;border-radius:6px;border:1px solid #e2e8f0;" />`
+      ).join('');
       return `<div style="margin-bottom:28px;">
         <h2 style="font-size:15px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px;">${i + 1}. ${task.title}</h2>
         <div style="font-size:13px;line-height:1.8;color:#334155;white-space:pre-wrap;">${task.content}</div>
+        ${imgs}
       </div>`;
     }
     const statusColor = task.status === 'in_progress' ? '#f59e0b' : task.status === 'assigned' ? '#0ea5e9' : '#94a3b8';
@@ -299,6 +303,13 @@ const views = {
     const { data: tender } = await supabase.from('tenders').select('*, profiles!tenders_created_by_fkey(full_name)').eq('id', id).single();
     if (!tender) return '<div class="p-8 text-center text-slate-500">Tender not found.</div>';
     const { data: tasks } = await supabase.from('tasks').select('*, profiles!tasks_assigned_to_fkey(full_name)').eq('tender_id', id).order('priority', { ascending: false });
+    const { data: taskImages } = await supabase.from('documents').select('task_id, file_name, storage_path, metadata').eq('tender_id', id).eq('doc_type', 'task_image');
+    for (const task of (tasks || [])) {
+      task.images = (taskImages || []).filter(img => img.task_id === task.id).map(img => ({
+        url: img.metadata?.public_url || supabase.storage.from('task-images').getPublicUrl(img.storage_path).data.publicUrl,
+        name: img.file_name,
+      }));
+    }
     const isLocked = ['submitted', 'archived'].includes(tender.status);
 
     let html = `<div class="view-enter space-y-6">
@@ -444,6 +455,19 @@ const views = {
             </div>
           </div>` : ''}
           ${task.review_notes ? `<p class="text-xs text-amber-400 mt-2">📝 Revision notes: ${task.review_notes}</p>` : ''}
+        </div>
+      </div>
+      <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
+        <div class="px-5 py-3 border-b border-slate-700/40 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-white">Images</h2>
+          ${canEdit ? `<div class="flex items-center gap-2">
+            <label id="img-upload-btn" class="text-xs text-brand-400 hover:text-brand-300 cursor-pointer px-2 py-1 rounded hover:bg-brand-500/10 transition">+ Add Images
+              <input type="file" accept="image/*" multiple class="hidden" onchange="window._uploadTaskImage('${id}', this)" />
+            </label>
+          </div>` : ''}
+        </div>
+        <div id="task-images-list" class="p-4 grid grid-cols-3 gap-3">
+          <p class="text-xs text-slate-500 col-span-3">Loading...</p>
         </div>
       </div>
       <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">

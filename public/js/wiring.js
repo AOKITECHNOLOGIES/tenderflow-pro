@@ -120,7 +120,7 @@ window._addTask = async (tenderId) => {
 };
 
 // ── Task Detail ──────────────────────────────────────────────────────────────
-function attachTaskDetailHandlers() { const {id} = getRouteParams(); loadTaskDocuments(id); window._loadTaskAssignFields(id); }
+function attachTaskDetailHandlers() { const {id} = getRouteParams(); loadTaskDocuments(id); window._loadTaskAssignFields(id); window._loadTaskImages(id); }
 
 async function loadTaskDocuments(taskId) {
   const listEl = document.getElementById('task-documents-list');
@@ -194,5 +194,71 @@ window._createCompany = async () => {
 window._approveTask = async (taskId) => { await supabase.from('tasks').update({status:'approved'}).eq('id',taskId); window.TF?.toast?.('Task approved','success'); renderView(getCurrentRoute()); };
 window._requestRevision = async (taskId) => { const notes=prompt('Revision notes:'); await supabase.from('tasks').update({status:'revision_needed',review_notes:notes||null}).eq('id',taskId); window.TF?.toast?.('Revision requested','success'); renderView(getCurrentRoute()); };
 window._startTask = async (taskId) => { await supabase.from('tasks').update({status:'in_progress',started_at:new Date().toISOString()}).eq('id',taskId); window.TF?.toast?.('Task started','success'); renderView(getCurrentRoute()); };
+
+window._uploadTaskImage = async (taskId, input) => {
+  const files = Array.from(input?.files || []);
+  if (!files.length) return;
+  const profile = getProfile();
+  const { data: task } = await supabase.from('tasks').select('tender_id').eq('id', taskId).maybeSingle();
+  if (!task) return;
+  const btn = document.getElementById('img-upload-btn');
+  if (btn) { btn.disabled = true; btn.textContent = `Uploading ${files.length} image(s)...`; }
+  let uploaded = 0;
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) { window.TF?.toast?.(`${file.name} is not an image`, 'warning'); continue; }
+    const ext = file.name.split('.').pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const storagePath = `${profile.company_id}/${task.tender_id}/${taskId}/${fileName}`;
+    const { error } = await supabase.storage.from('task-images').upload(storagePath, file, { upsert: true });
+    if (error) { window.TF?.toast?.(`Failed to upload ${file.name}: ${error.message}`, 'error'); continue; }
+    const { data: { publicUrl } } = supabase.storage.from('task-images').getPublicUrl(storagePath);
+    await supabase.from('documents').insert({
+      company_id: profile.company_id,
+      tender_id: task.tender_id,
+      task_id: taskId,
+      uploaded_by: profile.id,
+      file_name: file.name,
+      file_type: file.type,
+      file_size: file.size,
+      storage_path: storagePath,
+      doc_type: 'task_image',
+      metadata: { public_url: publicUrl },
+    });
+    uploaded++;
+  }
+  window.TF?.toast?.(`${uploaded} image(s) uploaded`, 'success');
+  if (btn) { btn.disabled = false; btn.textContent = '+ Add Images'; }
+  input.value = '';
+  window._loadTaskImages(taskId);
+};
+
+window._loadTaskImages = async (taskId) => {
+  const container = document.getElementById('task-images-list');
+  if (!container) return;
+  const { data: docs } = await supabase.from('documents')
+    .select('id, file_name, storage_path, metadata')
+    .eq('task_id', taskId)
+    .eq('doc_type', 'task_image')
+    .order('created_at', { ascending: true });
+  if (!docs?.length) { container.innerHTML = '<p class="text-xs text-slate-500">No images yet.</p>'; return; }
+  container.innerHTML = docs.map(d => {
+    const url = d.metadata?.public_url || supabase.storage.from('task-images').getPublicUrl(d.storage_path).data.publicUrl;
+    return `<div class="relative group">
+      <img src="${url}" alt="${d.file_name}" class="w-full h-32 object-cover rounded-lg border border-slate-700/50" />
+      <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition rounded-lg flex items-center justify-center gap-2">
+        <button onclick="window._deleteTaskImage('${d.id}', '${d.storage_path}', '${taskId}')" class="text-xs text-red-400 bg-surface-900/80 px-2 py-1 rounded">Delete</button>
+      </div>
+      <p class="text-xs text-slate-500 mt-1 truncate">${d.file_name}</p>
+    </div>`;
+  }).join('');
+};
+
+window._deleteTaskImage = async (docId, storagePath, taskId) => {
+  if (!confirm('Delete this image?')) return;
+  await supabase.storage.from('task-images').remove([storagePath]);
+  await supabase.from('documents').delete().eq('id', docId);
+  window.TF?.toast?.('Image deleted', 'success');
+  window._loadTaskImages(taskId);
+};
 
 console.log('[TenderFlow] Wiring loaded');
