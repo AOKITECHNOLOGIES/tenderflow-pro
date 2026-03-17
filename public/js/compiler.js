@@ -200,7 +200,6 @@ function generateCompiledHTML({ tender, companyName, logoUrl, sections, generate
 export async function triggerRFQAnalysis(tenderId, fileText) {
   const { data: { session } } = await supabase.auth.getSession();
 if (!session) throw new Error('Not authenticated');
-console.log('[Auth] Token exists:', !!session.access_token, '| Expires:', new Date(session.expires_at * 1000).toISOString());
 
   const response = await supabase.functions.invoke('parse-rfq', {
     body: { tender_id: tenderId, document_text: fileText },
