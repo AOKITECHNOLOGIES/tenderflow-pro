@@ -218,12 +218,21 @@ export async function extractTextFromFile(file) {
   if (file.type === 'application/pdf') {
     console.log('[PDF] Starting extraction:', file.name, file.size);
     try {
-      const pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
-      const pdfjs = pdfjsLib.default || pdfjsLib;
-      pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+      // Use the UMD global loaded via <script> tag in index.html.
+      // Dynamic ESM import of pdfjs-dist does NOT reliably expose GlobalWorkerOptions.
+      const pdfjs = window.pdfjsLib;
+      if (!pdfjs) throw new Error('PDF.js not loaded — ensure the script tag is present in index.html');
+
+      // Worker must be set before any getDocument() call
+      if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+        pdfjs.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
       console.log('[PDF] Loaded, pages:', pdf.numPages);
+
       let fullText = '';
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
