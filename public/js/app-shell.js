@@ -143,7 +143,7 @@ function buildLivePreview(tender, tasks) {
       ).join('');
       return `<div style="margin-bottom:28px;">
         <h2 style="font-size:15px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px;">${i + 1}. ${task.title}</h2>
-        <div style="font-size:13px;line-height:1.8;color:#334155;white-space:pre-wrap;">${task.content}</div>
+        <div style="font-size:13px;line-height:1.8;color:#334155;">${task.content}</div>
         ${imgs}
       </div>`;
     }
@@ -440,20 +440,21 @@ const views = {
           ${draft && !draft.synced ? '<span class="text-xs text-amber-400">Unsaved draft</span>' : ''}
         </div>
         <div class="p-5">
-          <textarea id="task-content-editor" rows="14" ${canEdit ? '' : 'disabled'}
-            class="w-full px-4 py-3 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm leading-relaxed focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition resize-none disabled:opacity-50 font-mono"
-            placeholder="Write your section content here...">${draft?.content || task.content || ''}</textarea>
-          ${canEdit ? `<div class="flex items-center justify-between mt-3">
-            <p id="save-status" class="text-xs text-slate-500">Auto-saves offline</p>
-            <div class="flex gap-2">
-              ${task.status === 'assigned' ? `<button onclick="window._startTask('${id}')" class="px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-lg transition">Start Working</button>` : ''}
-              <button onclick="window._saveTaskContent('${id}')" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium rounded-lg transition">Save to Server</button>
-              ${task.status === 'in_progress' ? `<button onclick="window._submitTask('${id}')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition">Submit for Review</button>` : ''}
-              ${task.status === 'submitted' && hasRoleLevel('bid_manager') ? `
-                <button onclick="window._approveTask('${id}')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition">Approve</button>
-                <button onclick="window._requestRevision('${id}')" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition">Request Revision</button>` : ''}
-            </div>
-          </div>` : ''}
+          ${canEdit ? `
+            <div id="quill-editor" style="min-height:280px; background:#0f172a; color:#e2e8f0; border-radius:8px; border:1px solid rgba(100,116,139,0.3);"></div>
+            <div id="task-content-hidden" style="display:none">${draft?.content || task.content || ''}</div>
+            <div class="flex items-center justify-between mt-3">
+              <p id="save-status" class="text-xs text-slate-500">Auto-saves offline</p>
+              <div class="flex gap-2">
+                ${task.status === 'assigned' ? `<button onclick="window._startTask('${id}')" class="px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-xs font-medium rounded-lg transition">Start Working</button>` : ''}
+                <button onclick="window._saveTaskContent('${id}')" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium rounded-lg transition">Save to Server</button>
+                ${task.status === 'in_progress' ? `<button onclick="window._submitTask('${id}')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition">Submit for Review</button>` : ''}
+                ${task.status === 'submitted' && hasRoleLevel('bid_manager') ? `
+                  <button onclick="window._approveTask('${id}')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition">Approve</button>
+                  <button onclick="window._requestRevision('${id}')" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition">Request Revision</button>` : ''}
+              </div>
+            </div>` 
+          : `<div class="px-4 py-3 bg-surface-900/60 border border-slate-600/50 rounded-lg text-slate-300 text-sm leading-relaxed min-h-48 prose prose-invert max-w-none">${draft?.content || task.content || '<span class="text-slate-500">No content yet.</span>'}</div>`}
           ${task.review_notes ? `<p class="text-xs text-amber-400 mt-2">📝 Revision notes: ${task.review_notes}</p>` : ''}
         </div>
       </div>
@@ -774,7 +775,7 @@ window._toggleAI = async (id, enabled) => {
 };
 
 window._saveTaskContent = async (taskId) => {
-  const content = document.getElementById('task-content-editor')?.value;
+  const content = window._quillEditor ? window._quillEditor.root.innerHTML : document.getElementById('task-content-editor')?.value;
   if (content === undefined) return;
   saveDraftOffline(taskId, content);
   const { error } = await supabase.from('tasks').update({ content }).eq('id', taskId);
@@ -790,11 +791,12 @@ window._submitTask = async (taskId) => {
 
 let _autoSaveTimer = null;
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'task-content-editor') {
+  if (e.target.closest('#quill-editor') || e.target.id === 'task-content-editor') {
     clearTimeout(_autoSaveTimer);
     const taskId = getRouteParams().id;
     _autoSaveTimer = setTimeout(() => {
-      saveDraftOffline(taskId, e.target.value);
+      const content = window._quillEditor ? window._quillEditor.root.innerHTML : e.target.value;
+      saveDraftOffline(taskId, content);
       const el = document.getElementById('save-status');
       if (el) { el.textContent = 'Draft saved locally'; el.className = 'text-xs text-slate-500'; }
     }, 1500);

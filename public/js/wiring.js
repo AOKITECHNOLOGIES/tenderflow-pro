@@ -120,7 +120,42 @@ window._addTask = async (tenderId) => {
 };
 
 // ── Task Detail ──────────────────────────────────────────────────────────────
-function attachTaskDetailHandlers() { const {id} = getRouteParams(); loadTaskDocuments(id); window._loadTaskAssignFields(id); window._loadTaskImages(id); }
+function attachTaskDetailHandlers() {
+  const {id} = getRouteParams();
+  loadTaskDocuments(id);
+  window._loadTaskAssignFields(id);
+  window._loadTaskImages(id);
+
+  // Initialize Quill editor if present
+  const editorEl = document.getElementById('quill-editor');
+  if (editorEl && window.Quill) {
+    window._quillEditor = new Quill('#quill-editor', {
+      theme: 'snow',
+      placeholder: 'Write your section content here...',
+      modules: {
+        toolbar: [
+          [{ header: [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          [{ indent: '-1' }, { indent: '+1' }],
+          ['blockquote'],
+          [{ align: [] }],
+          ['clean'],
+        ],
+      },
+    });
+    // Load existing content
+    const hidden = document.getElementById('task-content-hidden');
+    if (hidden?.textContent?.trim()) {
+      window._quillEditor.root.innerHTML = hidden.textContent;
+    }
+    // Style the editor for dark mode
+    editorEl.querySelector('.ql-toolbar')?.setAttribute('style', 'border-color: rgba(100,116,139,0.3); border-radius: 8px 8px 0 0; background: #1e293b;');
+    editorEl.querySelector('.ql-container')?.setAttribute('style', 'border-color: rgba(100,116,139,0.3); border-radius: 0 0 8px 8px; font-size: 14px; min-height: 240px;');
+  } else {
+    window._quillEditor = null;
+  }
+}
 
 async function loadTaskDocuments(taskId) {
   const listEl = document.getElementById('task-documents-list');
