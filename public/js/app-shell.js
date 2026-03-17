@@ -127,6 +127,45 @@ function renderSidebar() {
   return html;
 }
 
+const SECTION_ORDER = ['executive_summary','company_profile','project_approach','methodology','technical_proposal','timeline','project_plan','cv_key_personnel','past_experience','references','quality_assurance','health_safety','environmental','risk_management','pricing','financial_proposal','bbbee_certificate','tax_clearance','compliance','insurance','terms_conditions'];
+
+function buildLivePreview(tender, tasks) {
+  const approvedCount = (tasks || []).filter(t => t.status === 'approved').length;
+  const sorted = [...(tasks || [])].sort((a, b) => {
+    const ai = SECTION_ORDER.indexOf(a.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(a.section_type);
+    const bi = SECTION_ORDER.indexOf(b.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(b.section_type);
+    return ai - bi;
+  });
+  const sectionsHtml = sorted.map((task, i) => {
+    if (task.status === 'approved' && task.content) {
+      return `<div style="margin-bottom:28px;">
+        <h2 style="font-size:15px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px;">${i + 1}. ${task.title}</h2>
+        <div style="font-size:13px;line-height:1.8;color:#334155;white-space:pre-wrap;">${task.content}</div>
+      </div>`;
+    }
+    const statusColor = task.status === 'in_progress' ? '#f59e0b' : task.status === 'assigned' ? '#0ea5e9' : '#94a3b8';
+    return `<div style="margin-bottom:28px;padding:16px;background:#f8fafc;border:2px dashed #e2e8f0;border-radius:8px;">
+      <h2 style="font-size:15px;font-weight:700;color:#94a3b8;margin-bottom:6px;">${i + 1}. ${task.title}</h2>
+      <p style="font-size:12px;color:${statusColor};margin:0;">⏳ ${task.status.replace(/_/g,' ')} — awaiting content</p>
+      ${task.profiles?.full_name ? `<p style="font-size:11px;color:#94a3b8;margin:4px 0 0;">Assigned to: ${task.profiles.full_name}</p>` : ''}
+    </div>`;
+  }).join('');
+
+  return `<div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-700/40 flex items-center justify-between">
+      <h2 class="text-sm font-semibold text-white">Live Document Preview</h2>
+      <span class="text-xs text-slate-500">${approvedCount} of ${(tasks || []).length} sections approved</span>
+    </div>
+    <div class="p-6 bg-white rounded-b-xl font-serif text-slate-900 min-h-96 max-h-[70vh] overflow-y-auto">
+      <h1 style="font-size:22px;font-weight:700;text-align:center;margin-bottom:8px;color:#0f172a;">${tender.title}</h1>
+      ${tender.reference_number ? `<p style="font-size:12px;text-align:center;color:#64748b;margin-bottom:4px;">Ref: ${tender.reference_number}</p>` : ''}
+      ${tender.issuing_authority ? `<p style="font-size:12px;text-align:center;color:#64748b;margin-bottom:4px;">Issued by: ${tender.issuing_authority}</p>` : ''}
+      <hr style="border:none;border-top:2px solid #0ea5e9;margin:16px 0 24px;" />
+      ${sectionsHtml || '<p style="color:#94a3b8;text-align:center;font-size:13px;">No sections yet. Add tasks or import a document to see a preview.</p>'}
+    </div>
+  </div>`;
+}
+
 const views = {
 
   async dashboard() {
@@ -208,40 +247,6 @@ const views = {
       html += `<tr><td colspan="4" class="px-5 py-8 text-center text-slate-500">No tenders found.</td></tr>`;
     }
     html += `</tbody></table></div></div>`;
-
-    // Live document preview
-    html += `<div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
-      <div class="px-5 py-4 border-b border-slate-700/40 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-white">Live Document Preview</h2>
-        <span class="text-xs text-slate-500">${(tasks || []).filter(t => t.status === 'approved').length} of ${(tasks || []).length} sections approved</span>
-      </div>
-      <div class="p-6 bg-white rounded-b-xl font-serif text-slate-900 min-h-96 max-h-[70vh] overflow-y-auto">
-        <h1 style="font-size:22px; font-weight:700; text-align:center; margin-bottom:8px; color:#0f172a;">${tender.title}</h1>
-        ${tender.reference_number ? `<p style="font-size:12px; text-align:center; color:#64748b; margin-bottom:4px;">Ref: ${tender.reference_number}</p>` : ''}
-        ${tender.issuing_authority ? `<p style="font-size:12px; text-align:center; color:#64748b; margin-bottom:4px;">Issued by: ${tender.issuing_authority}</p>` : ''}
-        <hr style="border:none; border-top:2px solid #0ea5e9; margin:16px 0 24px;" />
-        ${(tasks || []).sort((a, b) => {
-          const order = ['executive_summary','company_profile','project_approach','methodology','technical_proposal','timeline','project_plan','cv_key_personnel','past_experience','references','quality_assurance','health_safety','environmental','risk_management','pricing','financial_proposal','bbbee_certificate','tax_clearance','compliance','insurance','terms_conditions'];
-          return (order.indexOf(a.section_type) ?? 99) - (order.indexOf(b.section_type) ?? 99);
-        }).map((task, i) => {
-          if (task.status === 'approved' && task.content) {
-            return `<div style="margin-bottom:28px;">
-              <h2 style="font-size:15px; font-weight:700; color:#0f172a; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:10px;">${i + 1}. ${task.title}</h2>
-              <div style="font-size:13px; line-height:1.8; color:#334155; white-space:pre-wrap;">${task.content}</div>
-            </div>`;
-          } else {
-            const statusColor = task.status === 'in_progress' ? '#f59e0b' : task.status === 'assigned' ? '#0ea5e9' : '#94a3b8';
-            const statusLabel = task.status.replace(/_/g, ' ');
-            return `<div style="margin-bottom:28px; padding:16px; background:#f8fafc; border:2px dashed #e2e8f0; border-radius:8px;">
-              <h2 style="font-size:15px; font-weight:700; color:#94a3b8; margin-bottom:6px;">${i + 1}. ${task.title}</h2>
-              <p style="font-size:12px; color:${statusColor}; margin:0;">⏳ ${statusLabel} — awaiting content</p>
-              ${task.profiles?.full_name ? `<p style="font-size:11px; color:#94a3b8; margin:4px 0 0;">Assigned to: ${task.profiles.full_name}</p>` : ''}
-            </div>`;
-          }
-        }).join('')}
-      </div>
-    </div>`;
-
     return html;
   },
 
@@ -320,10 +325,10 @@ const views = {
         <div class="px-5 py-4 border-b border-slate-700/40 flex items-center justify-between">
           <h2 class="text-sm font-semibold text-white">Tasks (${(tasks || []).length})</h2>
           ${!isLocked && hasRoleLevel('bid_manager') ? `
-  <div class="flex gap-3">
-    <button class="text-xs text-brand-400 hover:text-brand-300" onclick="window._addTask('${id}')">+ Add Task</button>
-    <button class="text-xs text-emerald-400 hover:text-emerald-300" onclick="window._importDocument('${id}')">↑ Import Document</button>
-  </div>` : ''}
+            <div class="flex gap-3">
+              <button class="text-xs text-brand-400 hover:text-brand-300" onclick="window._addTask('${id}')">+ Add Task</button>
+              <button class="text-xs text-emerald-400 hover:text-emerald-300" onclick="window._importDocument('${id}')">↑ Import Document</button>
+            </div>` : ''}
         </div>
         <table class="w-full text-sm">
           <thead><tr class="border-b border-slate-700/40">
@@ -331,7 +336,7 @@ const views = {
             <th class="px-5 py-2 text-left text-xs text-slate-400 uppercase">Assigned To</th>
             <th class="px-5 py-2 text-left text-xs text-slate-400 uppercase">Status</th>
             <th class="px-5 py-2 text-left text-xs text-slate-400 uppercase">Priority</th>
-<th class="px-5 py-2 text-xs text-slate-400 uppercase"></th>
+            <th class="px-5 py-2 text-xs text-slate-400 uppercase"></th>
           </tr></thead>
           <tbody class="divide-y divide-slate-700/30">`;
 
@@ -348,42 +353,12 @@ const views = {
         </td>
       </tr>`;
     }
-    if (!tasks?.length) html += `<tr><td colspan="4" class="px-5 py-8 text-center text-slate-500">No tasks yet. Upload an RFQ for AI analysis or add manually.</td></tr>`;
-    html += `</tbody></table></div></div>`;
+    if (!tasks?.length) html += `<tr><td colspan="5" class="px-5 py-8 text-center text-slate-500">No tasks yet. Upload an RFQ for AI analysis or add manually.</td></tr>`;
+    html += `</tbody></table></div>`;
 
-    // Live document preview
-    html += `<div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
-      <div class="px-5 py-4 border-b border-slate-700/40 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-white">Live Document Preview</h2>
-        <span class="text-xs text-slate-500">${(tasks || []).filter(t => t.status === 'approved').length} of ${(tasks || []).length} sections approved</span>
-      </div>
-      <div class="p-6 bg-white rounded-b-xl font-serif text-slate-900 min-h-96 max-h-[70vh] overflow-y-auto">
-        <h1 style="font-size:22px; font-weight:700; text-align:center; margin-bottom:8px; color:#0f172a;">${tender.title}</h1>
-        ${tender.reference_number ? `<p style="font-size:12px; text-align:center; color:#64748b; margin-bottom:4px;">Ref: ${tender.reference_number}</p>` : ''}
-        ${tender.issuing_authority ? `<p style="font-size:12px; text-align:center; color:#64748b; margin-bottom:4px;">Issued by: ${tender.issuing_authority}</p>` : ''}
-        <hr style="border:none; border-top:2px solid #0ea5e9; margin:16px 0 24px;" />
-        ${(tasks || []).sort((a, b) => {
-          const order = ['executive_summary','company_profile','project_approach','methodology','technical_proposal','timeline','project_plan','cv_key_personnel','past_experience','references','quality_assurance','health_safety','environmental','risk_management','pricing','financial_proposal','bbbee_certificate','tax_clearance','compliance','insurance','terms_conditions'];
-          return (order.indexOf(a.section_type) ?? 99) - (order.indexOf(b.section_type) ?? 99);
-        }).map((task, i) => {
-          if (task.status === 'approved' && task.content) {
-            return `<div style="margin-bottom:28px;">
-              <h2 style="font-size:15px; font-weight:700; color:#0f172a; border-bottom:1px solid #e2e8f0; padding-bottom:6px; margin-bottom:10px;">${i + 1}. ${task.title}</h2>
-              <div style="font-size:13px; line-height:1.8; color:#334155; white-space:pre-wrap;">${task.content}</div>
-            </div>`;
-          } else {
-            const statusColor = task.status === 'in_progress' ? '#f59e0b' : task.status === 'assigned' ? '#0ea5e9' : '#94a3b8';
-            const statusLabel = task.status.replace(/_/g, ' ');
-            return `<div style="margin-bottom:28px; padding:16px; background:#f8fafc; border:2px dashed #e2e8f0; border-radius:8px;">
-              <h2 style="font-size:15px; font-weight:700; color:#94a3b8; margin-bottom:6px;">${i + 1}. ${task.title}</h2>
-              <p style="font-size:12px; color:${statusColor}; margin:0;">⏳ ${statusLabel} — awaiting content</p>
-              ${task.profiles?.full_name ? `<p style="font-size:11px; color:#94a3b8; margin:4px 0 0;">Assigned to: ${task.profiles.full_name}</p>` : ''}
-            </div>`;
-          }
-        }).join('')}
-      </div>
-    </div>`;
+    html += buildLivePreview(tender, tasks);
 
+    html += `</div>`;
     return html;
   },
 
@@ -421,10 +396,10 @@ const views = {
   async 'task-detail'() {
     const { id } = getRouteParams();
     const { data: task } = await supabase.from('tasks')
-  .select('id, title, content, description, status, is_mandatory, review_notes, tender_id, assigned_to, priority, due_date')
-  .eq('id', id).single();
-const { data: taskTender } = await supabase.from('tenders').select('title, status').eq('id', task?.tender_id).maybeSingle();
-if (task) task.tenders = taskTender;
+      .select('id, title, content, description, status, is_mandatory, review_notes, tender_id, assigned_to, priority, due_date')
+      .eq('id', id).single();
+    const { data: taskTender } = await supabase.from('tenders').select('title, status').eq('id', task?.tender_id).maybeSingle();
+    if (task) task.tenders = taskTender;
     if (!task) return '<div class="p-8 text-center text-slate-500">Task not found.</div>';
     const isLocked = ['submitted', 'archived'].includes(task.tenders?.status);
     const canEdit = !isLocked && (task.assigned_to === getProfile().id || hasRoleLevel('bid_manager'));
@@ -973,7 +948,6 @@ window._createUser = async () => {
         ${(companies || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
       </select></div>`;
   }
-
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
   modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
@@ -1051,11 +1025,19 @@ window._startTask = async (taskId) => {
   window.TF?.toast?.('Task started', 'success');
   const route = getCurrentRoute(); if (route) renderView(route);
 };
+
+window._deleteTask = async (taskId, tenderId) => {
+  if (!confirm('Delete this task? This cannot be undone.')) return;
+  const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+  if (error) { window.TF?.toast?.(`Delete failed: ${error.message}`, 'error'); return; }
+  window.TF?.toast?.('Task deleted', 'success');
+  const route = getCurrentRoute(); if (route) renderView(route);
+};
+
 window._loadTaskAssignFields = async (taskId) => {
   const container = document.getElementById('task-assign-fields');
   if (!container) return;
   const profile = getProfile();
-  // Get company_id from the task itself, not from view scope
   const { data: taskRow } = await supabase.from('tasks').select('company_id').eq('id', taskId).maybeSingle();
   const companyId = taskRow?.company_id || _selectedCompanyId || profile.company_id;
   const { data: users } = await supabase.from('profiles')
@@ -1064,8 +1046,7 @@ window._loadTaskAssignFields = async (taskId) => {
     .eq('is_active', true).order('full_name');
   const { data: task, error: taskErr } = await supabase.from('tasks')
     .select('assigned_to, due_date, priority, is_mandatory')
-    .eq('id', taskId)
-    .maybeSingle();
+    .eq('id', taskId).maybeSingle();
   if (taskErr) { console.error('[Assign] Task fetch error:', taskErr.message); return; }
   const userOptions = (users || []).map(u =>
     `<option value="${u.id}" ${task?.assigned_to === u.id ? 'selected' : ''}>${u.full_name}${u.department ? ` (${u.department})` : ''}</option>`
@@ -1114,6 +1095,7 @@ window._saveTaskAssignment = async (taskId) => {
   window.TF?.toast?.('Task assignment saved', 'success');
   const route = getCurrentRoute(); if (route) renderView(route);
 };
+
 window._importDocument = async (tenderId) => {
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
@@ -1166,11 +1148,4 @@ window._importDocument = async (tenderId) => {
       btn.disabled = false; btn.textContent = 'Import & Parse';
     }
   });
-};
-window._deleteTask = async (taskId, tenderId) => {
-  if (!confirm('Delete this task? This cannot be undone.')) return;
-  const { error } = await supabase.from('tasks').delete().eq('id', taskId);
-  if (error) { window.TF?.toast?.(`Delete failed: ${error.message}`, 'error'); return; }
-  window.TF?.toast?.('Task deleted', 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
 };
