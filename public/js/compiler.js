@@ -272,3 +272,17 @@ export function downloadHTML(htmlContent, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+// ── Document Section Parser ──────────────────────────────────────────────────
+export async function triggerDocumentParse(tenderId, fileText, replaceExisting) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not authenticated');
+
+  const response = await supabase.functions.invoke('parse-document', {
+    body: { tender_id: tenderId, document_text: fileText, replace_existing: replaceExisting },
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+
+  if (response.error) throw new Error(response.error.message || 'Document parsing failed');
+  if (!response.data?.success) throw new Error(response.data?.error || 'No data returned');
+  return response.data;
+}

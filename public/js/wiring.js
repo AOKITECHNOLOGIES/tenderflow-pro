@@ -8,7 +8,7 @@ import { supabase } from './supabase-client.js';
 import { getProfile, hasRoleLevel, isSuperAdmin } from './auth.js';
 import { getRouteParams, getCurrentRoute, navigate } from './router.js';
 import { renderView } from './app-shell.js';
-import { compileTender, submitTender, extractTextFromFile, triggerRFQAnalysis, downloadHTML } from './compiler.js';
+import { compileTender, submitTender, extractTextFromFile, triggerRFQAnalysis, downloadHTML, triggerDocumentParse } from './compiler.js';
 
 export function attachDynamicHandlers(route) {
   switch (route.view) {

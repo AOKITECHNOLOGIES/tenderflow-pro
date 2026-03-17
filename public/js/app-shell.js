@@ -285,7 +285,11 @@ const views = {
       <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-700/40 flex items-center justify-between">
           <h2 class="text-sm font-semibold text-white">Tasks (${(tasks || []).length})</h2>
-          ${!isLocked && hasRoleLevel('bid_manager') ? `<button class="text-xs text-brand-400 hover:text-brand-300" onclick="window._addTask('${id}')">+ Add Task</button>` : ''}
+          ${!isLocked && hasRoleLevel('bid_manager') ? `
+  <div class="flex gap-3">
+    <button class="text-xs text-brand-400 hover:text-brand-300" onclick="window._addTask('${id}')">+ Add Task</button>
+    <button class="text-xs text-emerald-400 hover:text-emerald-300" onclick="window._importDocument('${id}')">↑ Import Document</button>
+  </div>` : ''}
         </div>
         <table class="w-full text-sm">
           <thead><tr class="border-b border-slate-700/40">
@@ -1037,4 +1041,57 @@ window._saveTaskAssignment = async (taskId) => {
   }
   window.TF?.toast?.('Task assignment saved', 'success');
   const route = getCurrentRoute(); if (route) renderView(route);
+};
+window._importDocument = async (tenderId) => {
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+    <h3 class="text-lg font-semibold text-white mb-2">Import Document as Sections</h3>
+    <p class="text-xs text-slate-400 mb-4">The AI will split your document into editable sections. You can then assign each section to a team member.</p>
+    <div id="id-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
+    <div id="id-success" class="hidden mb-3 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm"></div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm text-slate-300 mb-1">Upload Document (PDF or DOCX)</label>
+        <input id="id-file" type="file" accept=".pdf,.docx" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+      </div>
+      <div>
+        <label class="block text-sm text-slate-300 mb-1">Existing Tasks</label>
+        <select id="id-replace" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+          <option value="false">Keep existing tasks, add new sections</option>
+          <option value="true">Replace all existing tasks with imported sections</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button id="id-submit" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg">Import & Parse</button>
+      <button id="id-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#id-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('#id-submit').addEventListener('click', async () => {
+    const errEl = modal.querySelector('#id-error');
+    const successEl = modal.querySelector('#id-success');
+    const fileInput = modal.querySelector('#id-file');
+    const replaceExisting = modal.querySelector('#id-replace').value === 'true';
+    errEl.classList.add('hidden'); successEl.classList.add('hidden');
+    const file = fileInput?.files?.[0];
+    if (!file) { errEl.textContent = 'Please select a file.'; errEl.classList.remove('hidden'); return; }
+    const btn = modal.querySelector('#id-submit');
+    btn.disabled = true; btn.textContent = 'Parsing...';
+    try {
+      const { extractTextFromFile, triggerDocumentParse } = await import('./compiler.js');
+      const text = await extractTextFromFile(file);
+      const result = await triggerDocumentParse(tenderId, text, replaceExisting);
+      successEl.textContent = `✓ Created ${result.sections_created} sections from your document. Assign them to team members below.`;
+      successEl.classList.remove('hidden');
+      btn.textContent = 'Done';
+      setTimeout(() => { modal.remove(); const route = getCurrentRoute(); if (route) renderView(route); }, 2000);
+    } catch (err) {
+      errEl.textContent = err.message; errEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Import & Parse';
+    }
+  });
 };
