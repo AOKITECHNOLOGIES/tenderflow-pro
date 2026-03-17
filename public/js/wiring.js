@@ -136,7 +136,7 @@ window._uploadTaskDoc = async (taskId, input) => {
   const { data: task } = await supabase.from('tasks').select('tender_id').eq('id',taskId).single();
   if (!task) return;
   const storagePath = `${profile.company_id}/${task.tender_id}/${taskId}_${file.name}`;
-  const { error } = await supabase.storage.from('tender-documents').upload(storagePath, file);
+  const { error } = await supabase.storage.from('tender-documents').upload(storagePath, file, { upsert: true });
   if (error) { window.TF?.toast?.(`Upload failed: ${error.message}`,'error'); return; }
   await supabase.from('documents').insert({ company_id: profile.company_id, tender_id: task.tender_id, task_id: taskId, uploaded_by: profile.id, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath, doc_type: file.name.toLowerCase().includes('cv')?'cv':'supporting' });
   window.TF?.toast?.('File uploaded','success'); loadTaskDocuments(taskId); input.value='';
@@ -167,7 +167,7 @@ async function renderCompileView(tenderId, container) {
   document.getElementById('btn-submit-tender')?.addEventListener('click', async()=>{
     if(!allReady) return; if(!confirm('This will lock the tender permanently. Proceed?')) return;
     const s=document.getElementById('compile-status'); s.className='p-4 rounded-xl text-sm bg-amber-500/10 border border-amber-500/20 text-amber-400'; s.textContent='Submitting...'; s.classList.remove('hidden');
-    try { const compiled=await compileTender(tenderId); await submitTender(tenderId,compiled.snapshotData); const profile=getProfile(); const blob=new Blob([compiled.htmlDocument],{type:'text/html'}); const cp=`${profile.company_id}/${tenderId}/COMPILED_FINAL.html`; await supabase.storage.from('tender-documents').upload(cp,blob); await supabase.from('documents').insert({company_id:profile.company_id,tender_id:tenderId,uploaded_by:profile.id,file_name:'COMPILED_FINAL.html',file_type:'text/html',file_size:blob.size,storage_path:cp,doc_type:'compiled_final',is_locked:true}); downloadHTML(compiled.htmlDocument,`${tender.title.replace(/[^a-zA-Z0-9]/g,'_')}_SUBMITTED.html`); s.className='p-4 rounded-xl text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'; s.textContent='✓ Submitted and locked.'; window.TF?.toast?.('Tender submitted','success'); } catch(err){ s.className='p-4 rounded-xl text-sm bg-red-500/10 border border-red-500/20 text-red-400'; s.textContent=`✗ ${err.message}`; }
+    try { const compiled=await compileTender(tenderId); await submitTender(tenderId,compiled.snapshotData); const profile=getProfile(); const blob=new Blob([compiled.htmlDocument],{type:'text/html'}); const cp=`${profile.company_id}/${tenderId}/COMPILED_FINAL.html`; await supabase.storage.from('tender-documents').upload(cp, blob, { upsert: true }); await supabase.from('documents').insert({company_id:profile.company_id,tender_id:tenderId,uploaded_by:profile.id,file_name:'COMPILED_FINAL.html',file_type:'text/html',file_size:blob.size,storage_path:cp,doc_type:'compiled_final',is_locked:true}); downloadHTML(compiled.htmlDocument,`${tender.title.replace(/[^a-zA-Z0-9]/g,'_')}_SUBMITTED.html`); s.className='p-4 rounded-xl text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'; s.textContent='✓ Submitted and locked.'; window.TF?.toast?.('Tender submitted','success'); } catch(err){ s.className='p-4 rounded-xl text-sm bg-red-500/10 border border-red-500/20 text-red-400'; s.textContent=`✗ ${err.message}`; }
   });
 }
 
