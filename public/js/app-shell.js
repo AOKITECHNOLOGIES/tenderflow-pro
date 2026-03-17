@@ -341,7 +341,9 @@ const views = {
 
   async 'task-detail'() {
     const { id } = getRouteParams();
-    const { data: task } = await supabase.from('tasks').select('*, tenders(title, status)').eq('id', id).single();
+    const { data: task } = await supabase.from('tasks')
+  .select('id, title, content, description, status, is_mandatory, review_notes, tender_id, assigned_to, priority, due_date, tenders(title, status)')
+  .eq('id', id).single();
     if (!task) return '<div class="p-8 text-center text-slate-500">Task not found.</div>';
     const isLocked = ['submitted', 'archived'].includes(task.tenders?.status);
     const canEdit = !isLocked && (task.assigned_to === getProfile().id || hasRoleLevel('bid_manager'));
