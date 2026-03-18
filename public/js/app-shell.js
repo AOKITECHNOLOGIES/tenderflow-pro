@@ -38,19 +38,23 @@ let _selectedCompanyId = null;
 export function getViewScope() { return _viewScope; }
 export function getSelectedCompanyId() { return _selectedCompanyId; }
 
-function statCard(label, value, sublabel = '', color = 'brand') {
+function statCard(label, value, sublabel = '', color = 'brand', href = '') {
   const colors = {
-    brand:   'from-brand-500/10 to-brand-500/5 border-brand-500/20',
-    emerald: 'from-emerald-500/10 to-emerald-500/5 border-emerald-500/20',
-    amber:   'from-amber-500/10 to-amber-500/5 border-amber-500/20',
-    red:     'from-red-500/10 to-red-500/5 border-red-500/20',
-    violet:  'from-violet-500/10 to-violet-500/5 border-violet-500/20',
+    brand:   'from-brand-500/10 to-brand-500/5 border-brand-500/20 hover:border-brand-500/40',
+    emerald: 'from-emerald-500/10 to-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40',
+    amber:   'from-amber-500/10 to-amber-500/5 border-amber-500/20 hover:border-amber-500/40',
+    red:     'from-red-500/10 to-red-500/5 border-red-500/20 hover:border-red-500/40',
+    violet:  'from-violet-500/10 to-violet-500/5 border-violet-500/20 hover:border-violet-500/40',
   };
-  return `<div class="bg-gradient-to-br ${colors[color]} border rounded-xl p-5">
+  const inner = `
     <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">${label}</p>
     <p class="text-2xl font-bold text-white">${value}</p>
     ${sublabel ? `<p class="text-xs text-slate-500 mt-1">${sublabel}</p>` : ''}
-  </div>`;
+    ${href ? `<p class="text-xs text-slate-500 mt-2 opacity-0 group-hover:opacity-100 transition">View →</p>` : ''}`;
+  if (href) {
+    return `<a href="${href}" class="group block bg-gradient-to-br ${colors[color]} border rounded-xl p-5 transition cursor-pointer">${inner}</a>`;
+  }
+  return `<div class="bg-gradient-to-br ${colors[color]} border rounded-xl p-5 transition">${inner}</div>`;
 }
 
 function statusBadge(status) {
@@ -143,7 +147,7 @@ function buildLivePreview(tender, tasks) {
       ).join('');
       return `<div style="margin-bottom:28px;">
         <h2 style="font-size:15px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px;">${i + 1}. ${task.title}</h2>
-        <div style="font-size:13px;line-height:1.8;color:#334155;">${task.content}</div>
+        <div style="font-size:13px;line-height:1.8;color:#334155;">${task.content.replace(/<table/g, '<table style="border-collapse:collapse;width:100%;margin:8px 0;"').replace(/<td/g, '<td style="border:1px solid #cbd5e1;padding:6px 10px;"').replace(/<th/g, '<th style="border:1px solid #cbd5e1;padding:6px 10px;background:#f1f5f9;font-weight:600;"')}</div>
         ${imgs}
       </div>`;
     }
@@ -178,14 +182,50 @@ const views = {
     const [tenders, tasks, myTasks] = await Promise.all([
       supabase.from('tenders').select('id, status, deadline', { count: 'exact' }).match(companyFilter),
       supabase.from('tasks').select('id, status', { count: 'exact' }).match(companyFilter),
-      supabase.from('tasks').select('id, status, title, due_date, tenders(title)').eq('assigned_to', profile.id).neq('status', 'approved').limit(10),
+      supabase.from('tasks').select('id, status, title, due_date, tenders(title, id)').eq('assigned_to', profile.id).neq('status', 'approved').limit(30),
     ]);
     const tenderCount = tenders.count || 0;
     const taskCount = tasks.count || 0;
     const activeTenders = (tenders.data || []).filter(t => !['submitted', 'archived'].includes(t.status)).length;
-    const pendingTasks = (myTasks.data || []).length;
 
-    let html = `<div class="view-enter space-y-6">
+    // Split tasks into two groups
+    const INFORMATIONAL_STATUSES = ['submitted', 'revision_needed'];
+    const ACTIONABLE_STATUSES    = ['assigned', 'in_progress', 'unassigned'];
+    const allMyTasks  = myTasks.data || [];
+    const infoTasks   = allMyTasks.filter(t => INFORMATIONAL_STATUSES.includes(t.status));
+    const actionTasks = allMyTasks.filter(t => ACTIONABLE_STATUSES.includes(t.status));
+
+    function taskRow(task) {
+      const isOverdue = task.due_date && new Date(task.due_date) < new Date();
+      return `<a href="#/tasks/${task.id}" class="flex items-center justify-between px-5 py-3 hover:bg-slate-700/10 transition group">
+        <div class="min-w-0">
+          <p class="text-sm text-white truncate group-hover:text-brand-300 transition">${task.title}</p>
+          <p class="text-xs text-slate-500">${task.tenders?.title || 'Unlinked'}</p>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          ${statusBadge(task.status)}
+          ${task.due_date ? `<span class="text-xs ${isOverdue ? 'text-red-400 font-medium' : 'text-slate-500'}">${isOverdue ? '⚠ ' : ''}${new Date(task.due_date).toLocaleDateString()}</span>` : ''}
+        </div>
+      </a>`;
+    }
+
+    function taskGroup(title, subtitle, items, emptyMsg, dotClass) {
+      return `<div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-700/40 flex items-center gap-3">
+          <span class="w-2 h-2 rounded-full ${dotClass} shrink-0"></span>
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold text-white">${title}</h2>
+            <p class="text-xs text-slate-500 mt-0.5">${subtitle}</p>
+          </div>
+          <span class="ml-auto text-xs font-medium text-slate-400 bg-slate-700/40 px-2 py-0.5 rounded-full">${items.length}</span>
+        </div>
+        <div class="divide-y divide-slate-700/30">
+          ${items.length > 0 ? items.map(taskRow).join('') : `<div class="px-5 py-6 text-center text-sm text-slate-500">${emptyMsg}</div>`}
+        </div>
+      </div>`;
+    }
+
+    return `<div class="view-enter space-y-6">
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-bold text-white">Dashboard</h1>
@@ -194,27 +234,14 @@ const views = {
         ${hasRoleLevel('bid_manager') ? `<a href="#/tenders/new" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">${icon('plus')} New Tender</a>` : ''}
       </div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        ${statCard('Total Tenders', tenderCount, '', 'brand')}
-        ${statCard('Active Tenders', activeTenders, '', 'emerald')}
-        ${statCard('Total Tasks', taskCount, '', 'violet')}
-        ${statCard('My Pending', pendingTasks, '', 'amber')}
+        ${statCard('Total Tenders', tenderCount, 'All tenders', 'brand', '#/tenders')}
+        ${statCard('Active Tenders', activeTenders, 'In progress', 'emerald', '#/tenders')}
+        ${statCard('Total Tasks', taskCount, 'All tasks', 'violet', '#/tasks')}
+        ${statCard('Needs Attention', actionTasks.length, 'Actionable tasks', 'amber', '#/tasks')}
       </div>
-      <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
-        <div class="px-5 py-4 border-b border-slate-700/40"><h2 class="text-sm font-semibold text-white">My Active Tasks</h2></div>
-        <div class="divide-y divide-slate-700/30">`;
-
-    if (myTasks.data?.length > 0) {
-      for (const task of myTasks.data) {
-        html += `<a href="#/tasks/${task.id}" class="flex items-center justify-between px-5 py-3 hover:bg-slate-700/10 transition">
-          <div class="min-w-0"><p class="text-sm text-white truncate">${task.title}</p><p class="text-xs text-slate-500">${task.tenders?.title || 'Unlinked'}</p></div>
-          <div class="flex items-center gap-3 shrink-0">${statusBadge(task.status)}${task.due_date ? `<span class="text-xs text-slate-500">${new Date(task.due_date).toLocaleDateString()}</span>` : ''}</div>
-        </a>`;
-      }
-    } else {
-      html += `<div class="px-5 py-8 text-center text-sm text-slate-500">No active tasks assigned to you.</div>`;
-    }
-    html += `</div></div></div>`;
-    return html;
+      ${taskGroup('Needs Your Action', 'Tasks waiting for you to work on', actionTasks, "🎉 All caught up — nothing to do right now!", 'bg-brand-400')}
+      ${taskGroup('For Your Information', 'Awaiting review or flagged with revision notes', infoTasks, 'No informational updates right now.', 'bg-amber-400')}
+    </div>`;
   },
 
   async tenders() {
@@ -456,6 +483,15 @@ const views = {
         </div>
         <div class="p-5">
           ${canEdit ? `
+            <div id="quill-toolbar-extra" class="flex gap-1 mb-1">
+              <button type="button" title="Insert Table" onclick="window._insertTable()" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-300 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+                Insert Table
+              </button>
+              <button type="button" title="Add Row Below" onclick="window._tableAddRow()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Row</button>
+              <button type="button" title="Add Column Right" onclick="window._tableAddCol()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Col</button>
+              <button type="button" title="Delete Table" onclick="window._tableDelete()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-red-500/10 transition">✕ Table</button>
+            </div>
             <div id="quill-editor" style="min-height:280px; background:#0f172a; color:#e2e8f0; border-radius:8px; border:1px solid rgba(100,116,139,0.3);"></div>
             <div id="task-content-hidden" style="display:none">${draft?.content || task.content || ''}</div>
             <div class="flex items-center justify-between mt-3">
@@ -1303,4 +1339,108 @@ window._bulkDeleteTasks = async (tenderId) => {
   }
   window.TF?.toast?.(`${ids.length} task(s) deleted`, 'success');
   const route = getCurrentRoute(); if (route) refreshView(route);
+};
+
+// ── Table helpers (work on the Quill editor DOM directly) ────────────────────
+function _quillTableHelper() {
+  const editor = window._quillEditor;
+  if (!editor) { window.TF?.toast?.('Editor not ready', 'error'); return null; }
+  return editor;
+}
+
+function _buildTable(rows, cols) {
+  const borderStyle = 'border:1px solid #475569;padding:6px 10px;min-width:80px;';
+  let html = `<table style="border-collapse:collapse;width:100%;margin:8px 0;">`;
+  for (let r = 0; r < rows; r++) {
+    html += '<tr>';
+    for (let c = 0; c < cols; c++) {
+      const tag = r === 0 ? 'th' : 'td';
+      const bg = r === 0 ? 'background:#1e293b;font-weight:600;color:#94a3b8;' : 'background:#0f172a;color:#e2e8f0;';
+      html += `<${tag} style="${borderStyle}${bg}" contenteditable="true">${r === 0 ? `Header ${c + 1}` : ''}</${tag}>`;
+    }
+    html += '</tr>';
+  }
+  html += '</table><p><br></p>';
+  return html;
+}
+
+window._insertTable = () => {
+  const editor = _quillTableHelper(); if (!editor) return;
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-xs shadow-2xl">
+    <h3 class="text-sm font-semibold text-white mb-4">Insert Table</h3>
+    <div class="space-y-3">
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-slate-400 w-16">Rows</label>
+        <input id="tbl-rows" type="number" value="3" min="1" max="20" class="flex-1 px-3 py-1.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-slate-400 w-16">Columns</label>
+        <input id="tbl-cols" type="number" value="3" min="1" max="10" class="flex-1 px-3 py-1.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+      </div>
+    </div>
+    <div class="flex gap-2 mt-5">
+      <button id="tbl-insert" class="flex-1 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Insert</button>
+      <button id="tbl-cancel" class="flex-1 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#tbl-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('#tbl-insert').addEventListener('click', () => {
+    const rows = parseInt(modal.querySelector('#tbl-rows').value) || 3;
+    const cols = parseInt(modal.querySelector('#tbl-cols').value) || 3;
+    modal.remove();
+    const range = editor.getSelection(true);
+    const idx = range ? range.index : editor.getLength();
+    editor.clipboard.dangerouslyPasteHTML(idx, _buildTable(rows, cols));
+    editor.setSelection(idx + 1);
+  });
+};
+
+window._tableAddRow = () => {
+  const editor = _quillTableHelper(); if (!editor) return;
+  const sel = window.getSelection();
+  if (!sel || !sel.anchorNode) return;
+  const row = sel.anchorNode.closest ? sel.anchorNode.closest('tr') : null;
+  if (!row) { window.TF?.toast?.('Click inside a table cell first', 'info'); return; }
+  const cols = row.children.length;
+  const newRow = document.createElement('tr');
+  for (let i = 0; i < cols; i++) {
+    const td = document.createElement('td');
+    td.style.cssText = 'border:1px solid #475569;padding:6px 10px;min-width:80px;background:#0f172a;color:#e2e8f0;';
+    td.setAttribute('contenteditable', 'true');
+    newRow.appendChild(td);
+  }
+  row.parentNode.insertBefore(newRow, row.nextSibling);
+};
+
+window._tableAddCol = () => {
+  const editor = _quillTableHelper(); if (!editor) return;
+  const sel = window.getSelection();
+  if (!sel || !sel.anchorNode) return;
+  const cell = sel.anchorNode.closest ? sel.anchorNode.closest('td, th') : null;
+  if (!cell) { window.TF?.toast?.('Click inside a table cell first', 'info'); return; }
+  const table = cell.closest('table');
+  if (!table) return;
+  const colIdx = [...cell.parentNode.children].indexOf(cell);
+  table.querySelectorAll('tr').forEach((row, ri) => {
+    const newCell = document.createElement(ri === 0 ? 'th' : 'td');
+    const bg = ri === 0 ? 'background:#1e293b;font-weight:600;color:#94a3b8;' : 'background:#0f172a;color:#e2e8f0;';
+    newCell.style.cssText = `border:1px solid #475569;padding:6px 10px;min-width:80px;${bg}`;
+    newCell.setAttribute('contenteditable', 'true');
+    const ref = row.children[colIdx + 1] || null;
+    row.insertBefore(newCell, ref);
+  });
+};
+
+window._tableDelete = () => {
+  const editor = _quillTableHelper(); if (!editor) return;
+  const sel = window.getSelection();
+  if (!sel || !sel.anchorNode) return;
+  const table = sel.anchorNode.closest ? sel.anchorNode.closest('table') : null;
+  if (!table) { window.TF?.toast?.('Click inside a table first', 'info'); return; }
+  if (!confirm('Remove this table?')) return;
+  table.remove();
 };
