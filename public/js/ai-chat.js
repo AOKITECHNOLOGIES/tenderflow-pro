@@ -266,7 +266,8 @@ async function buildContext() {
   const { data: myTasks } = await supabase.from('tasks')
     .select('id, title, status, due_date, tenders(title)')
     .eq('assigned_to', profile.id)
-    .not('status', 'in', '("approved","archived")')
+    .not('status', 'eq', 'approved')
+    .not('status', 'eq', 'archived')
     .order('due_date', { ascending: true })
     .limit(8);
   ctx.my_tasks = (myTasks || []).map(t => ({
@@ -403,25 +404,21 @@ window._aiChatSend = async () => {
     // Build system prompt
     const systemPrompt = buildSystemPrompt(ctx);
 
-    // Call Claude API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
+    // Call Claude via Supabase edge function proxy (avoids CORS)
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await supabase.functions.invoke('ai-chat', {
+      body: {
         system: systemPrompt,
         messages: _chatHistory.map(m => ({ role: m.role, content: m.content })),
-      }),
+        max_tokens: 1000,
+      },
+      headers: { Authorization: `Bearer ${session.access_token}` },
     });
 
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || `API error ${response.status}`);
-    }
-
-    const data = await response.json();
-    const assistantMessage = data.content?.[0]?.text || 'Sorry, I could not generate a response.';
+    if (response.error) throw new Error(response.error.message || 'Edge function error');
+    const data = response.data;
+    if (data?.error) throw new Error(data.error);
+    const assistantMessage = data?.content?.[0]?.text || 'Sorry, I could not generate a response.';
 
     // Add to history
     _chatHistory.push({ role: 'assistant', content: assistantMessage });
