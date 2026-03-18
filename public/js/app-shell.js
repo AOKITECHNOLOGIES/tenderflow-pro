@@ -313,6 +313,10 @@ const views = {
           <input id="tf-authority" type="text" class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition" placeholder="Department of Public Works" />
         </div>
         <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1.5">Account Manager</label>
+          <input id="tf-account-manager" type="text" class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition" placeholder="e.g. John Smith" />
+        </div>
+        <div>
           <label class="block text-sm font-medium text-slate-300 mb-1.5">Description</label>
           <textarea id="tf-desc" rows="3" class="w-full px-4 py-2.5 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 transition resize-none" placeholder="Brief description of the tender scope..."></textarea>
         </div>
@@ -356,6 +360,7 @@ const views = {
             ${statusBadge(tender.status)}
             ${isLocked ? '<span class="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">🔒 Read-Only</span>' : ''}
             ${tender.deadline ? `<span class="text-xs text-slate-500">Due: ${new Date(tender.deadline).toLocaleDateString()}</span>` : ''}
+          ${tender.account_manager ? `<span class="text-xs text-slate-500">Account Manager: <span class="text-slate-300">${tender.account_manager}</span></span>` : ''}
           </div>
         </div>
         <div class="flex gap-2">
@@ -613,7 +618,7 @@ const views = {
         <h1 class="text-xl font-bold text-white">User Management</h1>
         <div class="flex gap-2">
           <button onclick="window._manageDepartments()" class="inline-flex items-center gap-2 px-4 py-2 border border-slate-600/50 text-slate-300 text-sm font-medium rounded-lg transition hover:bg-slate-700/20">Departments</button>
-          <button onclick="window._createUser()" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">${icon('plus')} Add User</button>
+          ${hasRoleLevel('it_admin') ? `<button onclick="window._createUser()" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">${icon('plus')} Add User</button>` : ''}
         </div>
       </div>
       <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
@@ -894,6 +899,8 @@ window._editTender = async (tenderId) => {
       </div>
       <div><label class="block text-sm text-slate-300 mb-1">Issuing Authority</label>
         <input id="et-authority" type="text" value="${tender.issuing_authority || ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Account Manager</label>
+        <input id="et-account-manager" type="text" value="${tender.account_manager || ''}" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
       <div><label class="block text-sm text-slate-300 mb-1">Description</label>
         <textarea id="et-desc" rows="3" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm resize-none">${tender.description || ''}</textarea></div>
       <div><label class="block text-sm text-slate-300 mb-1">Status</label>
@@ -920,6 +927,7 @@ window._editTender = async (tenderId) => {
       issuing_authority: modal.querySelector('#et-authority').value.trim() || null,
       description: modal.querySelector('#et-desc').value.trim() || null,
       status: modal.querySelector('#et-status').value,
+      account_manager: modal.querySelector('#et-account-manager')?.value.trim() || null,
     }).eq('id', tenderId);
     if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return; }
     modal.remove(); window.TF?.toast?.('Tender updated', 'success');
@@ -1392,10 +1400,38 @@ window._insertTable = () => {
     const rows = parseInt(modal.querySelector('#tbl-rows').value) || 3;
     const cols = parseInt(modal.querySelector('#tbl-cols').value) || 3;
     modal.remove();
+    // Insert table directly into editor DOM (dangerouslyPasteHTML at index is unreliable for tables)
     const range = editor.getSelection(true);
-    const idx = range ? range.index : editor.getLength();
-    editor.clipboard.dangerouslyPasteHTML(idx, _buildTable(rows, cols));
-    editor.setSelection(idx + 1);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = _buildTable(rows, cols);
+    const table = tempDiv.firstChild;
+    // Find insertion point in editor DOM
+    const editorRoot = editor.root;
+    let insertAfter = null;
+    if (range) {
+      // Find which block element the cursor is in
+      const [leaf] = editor.getLeaf(range.index);
+      if (leaf && leaf.domNode) {
+        let node = leaf.domNode;
+        while (node && node.parentNode !== editorRoot) node = node.parentNode;
+        insertAfter = node;
+      }
+    }
+    if (insertAfter && insertAfter !== editorRoot) {
+      editorRoot.insertBefore(table, insertAfter.nextSibling);
+    } else {
+      editorRoot.appendChild(table);
+    }
+    // Add a paragraph after the table so cursor can move past it
+    const p = document.createElement('p');
+    p.innerHTML = '<br>';
+    table.after(p);
+    // Make table cells editable and focusable
+    table.querySelectorAll('td, th').forEach(cell => {
+      cell.setAttribute('contenteditable', 'true');
+      cell.style.cursor = 'text';
+    });
+    editor.update();
   });
 };
 

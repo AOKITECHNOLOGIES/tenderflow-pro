@@ -50,11 +50,13 @@ function attachTenderCreateHandlers() {
     const submitBtn = form.querySelector('button[type="submit"]');
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Creating...'; }
 
+    const accountManager = document.getElementById('tf-account-manager')?.value.trim();
     const { data: tender, error } = await supabase.from('tenders').insert({
       title,
       reference_number: ref || null,
       deadline: deadline || null,
       issuing_authority: authority || null,
+      account_manager: accountManager || null,
       description: desc || null,
       company_id: profile.company_id,
       created_by: profile.id,
@@ -79,34 +81,86 @@ function attachTenderCreateHandlers() {
 }
 
 async function uploadRFQ(file, tenderId, profile) {
-  const ext = file.name.split('.').pop();
-  const storagePath = `${profile.company_id}/${tenderId}/rfq_${Date.now()}.${ext}`;
-  const { error: uploadErr } = await supabase.storage.from('documents').upload(storagePath, file, { upsert: true });
-  if (uploadErr) { console.error('[RFQ Upload]', uploadErr); return; }
+  // Show parsing progress overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'parse-overlay';
+  overlay.className = 'fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center';
+  overlay.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-8 w-full max-w-sm text-center shadow-2xl">
+    <div class="w-12 h-12 bg-violet-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    </div>
+    <p class="text-white font-semibold mb-1" id="parse-status">Uploading document...</p>
+    <p class="text-xs text-slate-400 mb-5" id="parse-substatus">Please wait while we process your RFQ</p>
+    <div class="w-full bg-surface-900 rounded-full h-2 overflow-hidden">
+      <div id="parse-bar" class="h-full bg-violet-500 rounded-full transition-all duration-500" style="width:10%"></div>
+    </div>
+    <p class="text-xs text-slate-500 mt-3" id="parse-pct">10%</p>
+  </div>`;
+  document.body.appendChild(overlay);
 
-  await supabase.from('documents').insert({
-    company_id: profile.company_id,
-    tender_id: tenderId,
-    uploaded_by: profile.id,
-    file_name: file.name,
-    file_type: file.type,
-    file_size: file.size,
-    storage_path: storagePath,
-    doc_type: 'rfq_source',
-  });
+  function setProgress(pct, status, sub) {
+    const bar = document.getElementById('parse-bar');
+    const statusEl = document.getElementById('parse-status');
+    const subEl = document.getElementById('parse-substatus');
+    const pctEl = document.getElementById('parse-pct');
+    if (bar) bar.style.width = pct + '%';
+    if (statusEl) statusEl.textContent = status;
+    if (subEl && sub) subEl.textContent = sub;
+    if (pctEl) pctEl.textContent = pct + '%';
+  }
 
-  // Trigger AI parse
   try {
+    // Upload file
+    setProgress(15, 'Uploading document...', 'Storing your RFQ file securely');
+    const ext = file.name.split('.').pop();
+    const storagePath = `${profile.company_id}/${tenderId}/rfq_${Date.now()}.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from('documents').upload(storagePath, file, { upsert: true });
+    if (uploadErr) { console.error('[RFQ Upload]', uploadErr); overlay.remove(); return; }
+
+    setProgress(30, 'File stored...', 'Recording document metadata');
+    await supabase.from('documents').insert({
+      company_id: profile.company_id,
+      tender_id: tenderId,
+      uploaded_by: profile.id,
+      file_name: file.name,
+      file_type: file.type,
+      file_size: file.size,
+      storage_path: storagePath,
+      doc_type: 'rfq_source',
+    });
+
+    // Extract text
+    setProgress(45, 'Extracting text...', 'Reading document contents');
     const { data: { session } } = await supabase.auth.getSession();
     const { extractTextFromFile } = await import('./compiler.js');
     const text = await extractTextFromFile(file);
-    await supabase.functions.invoke('parse-rfq', {
-      body: { tender_id: tenderId, text },
+
+    setProgress(60, 'Analysing with AI...', 'Identifying actionable sections and requirements');
+    await supabase.from('tenders').update({ status: 'analyzing' }).eq('id', tenderId);
+
+    setProgress(75, 'Creating tasks...', 'Building your task list from the document');
+    const { data: parseResult, error: parseErr } = await supabase.functions.invoke('parse-document', {
+      body: { tender_id: tenderId, text, mode: 'rfq' },
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
-    await supabase.from('tenders').update({ status: 'analyzing' }).eq('id', tenderId);
+
+    if (parseErr) {
+      console.warn('[RFQ Parse] parse-document failed, trying parse-rfq fallback:', parseErr);
+      await supabase.functions.invoke('parse-rfq', {
+        body: { tender_id: tenderId, text },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+    }
+
+    setProgress(95, 'Finalising...', 'Almost done');
+    await supabase.from('tenders').update({ status: 'in_progress' }).eq('id', tenderId);
+    setProgress(100, 'Done!', 'Tasks created successfully');
+    await new Promise(r => setTimeout(r, 600));
   } catch (err) {
     console.error('[RFQ Parse]', err);
+    window.TF?.toast?.('Document uploaded but AI parse failed — you can import it manually from the tender page', 'warning');
+  } finally {
+    overlay.remove();
   }
 }
 
@@ -253,6 +307,35 @@ function attachTaskDetailHandlers() {
         'color: #e2e8f0',
         'background: #0f172a',
       ].join('; ');
+    }
+
+    // Fix: Quill applies list/indent to entire block by default.
+    // Scope list styles so they only apply to the specific list element, not the whole editor.
+    const styleId = 'quill-scope-fix';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        .ql-editor { white-space: pre-wrap; }
+        .ql-editor ol, .ql-editor ul { margin: 0; padding-left: 1.5em; }
+        .ql-editor li { margin: 0; }
+        .ql-editor .ql-indent-1 { padding-left: 3em; }
+        .ql-editor .ql-indent-2 { padding-left: 4.5em; }
+        .ql-editor .ql-indent-3 { padding-left: 6em; }
+        .ql-editor td, .ql-editor th { border: 1px solid #475569 !important; padding: 6px 10px !important; min-width: 80px; }
+        .ql-editor table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+        .ql-editor th { background: #1e293b; font-weight: 600; color: #94a3b8; }
+        .ql-editor td { background: #0f172a; color: #e2e8f0; }
+        .ql-toolbar button:hover svg .ql-stroke { stroke: #e2e8f0 !important; }
+        .ql-toolbar button:hover svg .ql-fill { fill: #e2e8f0 !important; }
+        .ql-toolbar button.ql-active svg .ql-stroke { stroke: #38bdf8 !important; }
+        .ql-toolbar button.ql-active svg .ql-fill { fill: #38bdf8 !important; }
+        .ql-toolbar .ql-picker-label { color: #94a3b8 !important; }
+        .ql-toolbar .ql-picker-options { background: #1e293b !important; border-color: rgba(100,116,139,0.3) !important; }
+        .ql-toolbar .ql-picker-item { color: #e2e8f0 !important; }
+        .ql-editor.ql-blank::before { color: #475569 !important; font-style: italic; }
+      `;
+      document.head.appendChild(style);
     }
   } else {
     window._quillEditor = null;
