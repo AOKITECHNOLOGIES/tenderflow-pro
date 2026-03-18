@@ -266,8 +266,7 @@ async function buildContext() {
   const { data: myTasks } = await supabase.from('tasks')
     .select('id, title, status, due_date, tenders(title)')
     .eq('assigned_to', profile.id)
-    .neq('status', 'approved')
-    .neq('status', 'archived')
+    .not('status', 'in', '(approved,archived)')
     .order('due_date', { ascending: true })
     .limit(8);
   ctx.my_tasks = (myTasks || []).map(t => ({
