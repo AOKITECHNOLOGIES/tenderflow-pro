@@ -266,8 +266,8 @@ async function buildContext() {
   const { data: myTasks } = await supabase.from('tasks')
     .select('id, title, status, due_date, tenders(title)')
     .eq('assigned_to', profile.id)
-    .not('status', 'eq', 'approved')
-    .not('status', 'eq', 'archived')
+    .neq('status', 'approved')
+    .neq('status', 'archived')
     .order('due_date', { ascending: true })
     .limit(8);
   ctx.my_tasks = (myTasks || []).map(t => ({
@@ -405,18 +405,16 @@ window._aiChatSend = async () => {
     const systemPrompt = buildSystemPrompt(ctx);
 
     // Call Claude via Supabase edge function proxy (avoids CORS)
-    const { data: { session } } = await supabase.auth.getSession();
-    const response = await supabase.functions.invoke('ai-chat', {
+    // supabase.functions.invoke automatically attaches the session token
+    const { data, error: fnError } = await supabase.functions.invoke('ai-chat', {
       body: {
         system: systemPrompt,
         messages: _chatHistory.map(m => ({ role: m.role, content: m.content })),
         max_tokens: 1000,
       },
-      headers: { Authorization: `Bearer ${session.access_token}` },
     });
 
-    if (response.error) throw new Error(response.error.message || 'Edge function error');
-    const data = response.data;
+    if (fnError) throw new Error(fnError.message || 'Edge function error');
     if (data?.error) throw new Error(data.error);
     const assistantMessage = data?.content?.[0]?.text || 'Sorry, I could not generate a response.';
 
