@@ -72,7 +72,7 @@ export function mountAIChat() {
   // Chat button
   const btn = document.createElement('button');
   btn.id = 'ai-chat-btn';
-  btn.className = 'fixed bottom-6 right-6 z-[150] w-13 h-13 bg-violet-600 hover:bg-violet-500 text-white rounded-full shadow-xl shadow-violet-900/40 flex items-center justify-center gap-2 px-4 py-3';
+  btn.className = 'fixed bottom-6 right-6 z-[130] w-auto bg-violet-600 hover:bg-violet-500 text-white rounded-full shadow-xl shadow-violet-900/40 flex items-center justify-center gap-2 px-4 py-3';
   btn.innerHTML = `
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -86,7 +86,7 @@ export function mountAIChat() {
   // Chat panel
   const panel = document.createElement('div');
   panel.id = 'ai-chat-panel';
-  panel.className = 'hidden-panel fixed bottom-0 right-0 z-[140] w-full max-w-md h-[85vh] bg-surface-900 border-l border-t border-slate-700/60 shadow-2xl flex flex-col rounded-tl-2xl';
+  panel.className = 'hidden-panel fixed bottom-0 right-0 z-[160] w-full max-w-md h-[85vh] bg-surface-900 border-l border-t border-slate-700/60 shadow-2xl flex flex-col rounded-tl-2xl';
   panel.innerHTML = `
     <!-- Header -->
     <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 shrink-0">
@@ -176,6 +176,9 @@ function openChat() {
   const panel = document.getElementById('ai-chat-panel');
   if (panel) { panel.classList.remove('hidden-panel'); panel.classList.add('visible-panel'); }
   document.getElementById('ai-chat-badge')?.classList.add('hidden');
+  // Hide floating button while panel is open
+  const btn = document.getElementById('ai-chat-btn');
+  if (btn) btn.style.display = 'none';
   setTimeout(() => document.getElementById('ai-chat-input')?.focus(), 300);
 }
 
@@ -183,6 +186,9 @@ function closeChat() {
   _isOpen = false;
   const panel = document.getElementById('ai-chat-panel');
   if (panel) { panel.classList.add('hidden-panel'); panel.classList.remove('visible-panel'); }
+  // Show floating button again
+  const btn = document.getElementById('ai-chat-btn');
+  if (btn) btn.style.display = '';
 }
 
 window._aiChatClose = closeChat;
