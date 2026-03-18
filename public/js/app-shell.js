@@ -9,6 +9,7 @@ import {
   canInstallPWA, promptPWAInstall,
 } from './auth.js';
 import { initRouter, navigate, getSidebarItems, getRouteParams, getCurrentRoute } from './router.js';
+import { attachRouteHandlers } from './wiring.js';
 
 const ICONS = {
   grid:          '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
@@ -797,6 +798,7 @@ export async function refreshView(route) {
     const temp = document.createElement('div');
     temp.innerHTML = html;
     container.replaceChildren(...temp.childNodes);
+    attachRouteHandlers(route);
   } catch (err) {
     console.error('[View] Refresh error:', err);
   }
@@ -809,7 +811,7 @@ export async function renderView(route) {
   container.innerHTML = `<div class="shimmer h-8 w-48 rounded mb-4"></div><div class="shimmer h-4 w-96 rounded"></div>`;
   const renderer = views[route.view];
   if (renderer) {
-    try { container.innerHTML = await renderer(); }
+    try { container.innerHTML = await renderer(); attachRouteHandlers(route); }
     catch (err) { console.error('[View] Render error:', err); container.innerHTML = `<div class="p-8 text-center"><p class="text-red-400">Error loading view: ${err.message}</p></div>`; }
   } else {
     container.innerHTML = `<div class="p-8 text-center text-slate-500">View "${route.view}" not implemented yet.</div>`;
