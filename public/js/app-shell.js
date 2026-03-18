@@ -468,7 +468,7 @@ const views = {
                   <button onclick="window._approveTask('${id}')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition">Approve</button>
                   <button onclick="window._requestRevision('${id}')" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition">Request Revision</button>` : ''}
               </div>
-            </div>` 
+            </div>`
           : `<div class="px-4 py-3 bg-surface-900/60 border border-slate-600/50 rounded-lg text-slate-300 text-sm leading-relaxed min-h-48 prose prose-invert max-w-none">${draft?.content || task.content || '<span class="text-slate-500">No content yet.</span>'}</div>`}
           ${task.review_notes ? `<p class="text-xs text-amber-400 mt-2">📝 Revision notes: ${task.review_notes}</p>` : ''}
         </div>
@@ -750,6 +750,23 @@ async function loadCompaniesForScope() {
   }
 }
 
+// ── refreshView: swaps content in-place, no shimmer flash ────────────────────
+export async function refreshView(route) {
+  const container = document.getElementById('view-container');
+  if (!container) return;
+  const renderer = views[route.view];
+  if (!renderer) return;
+  try {
+    const html = await renderer();
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    container.replaceChildren(...temp.childNodes);
+  } catch (err) {
+    console.error('[View] Refresh error:', err);
+  }
+}
+
+// ── renderView: full reload with shimmer (navigation + scope changes only) ───
 export async function renderView(route) {
   const container = document.getElementById('view-container');
   if (!container) return;
@@ -768,6 +785,7 @@ export async function renderView(route) {
 // ── Global Handlers ──────────────────────────────────────────────────────────
 window._logout = async () => { await logout(); navigate('/login'); };
 
+// Keep renderView for scope/company switches — these are intentional full reloads
 window._setScope = (scope) => {
   _viewScope = scope;
   document.getElementById('scope-company-select')?.classList.toggle('hidden', scope !== 'company');
@@ -780,6 +798,7 @@ window._selectCompany = async (id) => {
   await renderView(route);
 };
 
+// Keep renderView for company/AI toggles — they affect global state
 window._toggleCompany = async (id, active) => {
   await supabase.from('companies').update({ is_active: active }).eq('id', id);
   const route = getCurrentRoute(); if (route) renderView(route);
@@ -802,7 +821,7 @@ window._saveTaskContent = async (taskId) => {
 window._submitTask = async (taskId) => {
   await window._saveTaskContent(taskId);
   await supabase.from('tasks').update({ status: 'submitted', completed_at: new Date().toISOString() }).eq('id', taskId);
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 let _autoSaveTimer = null;
@@ -868,7 +887,7 @@ window._editTender = async (tenderId) => {
     }).eq('id', tenderId);
     if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return; }
     modal.remove(); window.TF?.toast?.('Tender updated', 'success');
-    const route = getCurrentRoute(); if (route) renderView(route);
+    const route = getCurrentRoute(); if (route) refreshView(route);
   });
 };
 
@@ -886,7 +905,7 @@ window._deleteTender = async (tenderId) => {
 window._toggleUser = async (userId, active) => {
   await supabase.from('profiles').update({ is_active: active }).eq('id', userId);
   window.TF?.toast?.(active ? 'User activated' : 'User suspended', 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 window._editUser = async (userId) => {
@@ -927,7 +946,7 @@ window._editUser = async (userId) => {
     }).eq('id', userId);
     if (error) { window.TF?.toast?.(`Update failed: ${error.message}`, 'error'); return; }
     modal.remove(); window.TF?.toast?.('User updated', 'success');
-    const route = getCurrentRoute(); if (route) renderView(route);
+    const route = getCurrentRoute(); if (route) refreshView(route);
   });
 };
 
@@ -971,7 +990,7 @@ window._renameDepartment = async (oldName) => {
   const profile = getProfile();
   await supabase.from('profiles').update({ department: newName }).eq('department', oldName).eq('company_id', _selectedCompanyId || profile.company_id);
   window.TF?.toast?.(`Department renamed to "${newName}"`, 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 window._createUser = async () => {
@@ -1044,7 +1063,7 @@ window._createUser = async () => {
     successEl.textContent = `User "${name}" created successfully. They can log in with their email and temporary password.`;
     successEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Create User';
     window.TF?.toast?.(`User "${name}" created`, 'success');
-    setTimeout(() => { modal.remove(); const route = getCurrentRoute(); if (route) renderView(route); }, 2000);
+    setTimeout(() => { modal.remove(); const route = getCurrentRoute(); if (route) refreshView(route); }, 2000);
   });
 };
 
@@ -1052,20 +1071,20 @@ window._createUser = async () => {
 window._approveTask = async (taskId) => {
   await supabase.from('tasks').update({ status: 'approved' }).eq('id', taskId);
   window.TF?.toast?.('Task approved', 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 window._requestRevision = async (taskId) => {
   const notes = prompt('Revision notes (optional):');
   await supabase.from('tasks').update({ status: 'revision_needed', review_notes: notes || null }).eq('id', taskId);
   window.TF?.toast?.('Revision requested', 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 window._startTask = async (taskId) => {
   await supabase.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString() }).eq('id', taskId);
   window.TF?.toast?.('Task started', 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 window._deleteTask = async (taskId, tenderId) => {
@@ -1073,7 +1092,7 @@ window._deleteTask = async (taskId, tenderId) => {
   const { error } = await supabase.from('tasks').delete().eq('id', taskId);
   if (error) { window.TF?.toast?.(`Delete failed: ${error.message}`, 'error'); return; }
   window.TF?.toast?.('Task deleted', 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 window._loadTaskAssignFields = async (taskId) => {
@@ -1135,7 +1154,7 @@ window._saveTaskAssignment = async (taskId) => {
     return;
   }
   window.TF?.toast?.('Task assignment saved', 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 window._importDocument = async (tenderId) => {
@@ -1184,7 +1203,7 @@ window._importDocument = async (tenderId) => {
       successEl.textContent = `✓ Created ${result.sections_created} sections from your document. Assign them to team members below.`;
       successEl.classList.remove('hidden');
       btn.textContent = 'Done';
-      setTimeout(() => { modal.remove(); const route = getCurrentRoute(); if (route) renderView(route); }, 2000);
+      setTimeout(() => { modal.remove(); const route = getCurrentRoute(); if (route) refreshView(route); }, 2000);
     } catch (err) {
       errEl.textContent = err.message; errEl.classList.remove('hidden');
       btn.disabled = false; btn.textContent = 'Import & Parse';
@@ -1211,7 +1230,7 @@ window._deleteUserPrompt = async (userId, userName) => {
   modal.querySelector('#du-soft').addEventListener('click', async () => {
     await supabase.from('profiles').update({ is_active: false }).eq('id', userId);
     modal.remove(); window.TF?.toast?.(`${userName} deactivated`, 'success');
-    const route = getCurrentRoute(); if (route) renderView(route);
+    const route = getCurrentRoute(); if (route) refreshView(route);
   });
   modal.querySelector('#du-hard').addEventListener('click', async () => {
     if (!confirm(`Permanently delete ${userName}? This cannot be undone.`)) return;
@@ -1222,7 +1241,7 @@ window._deleteUserPrompt = async (userId, userName) => {
     });
     await supabase.from('profiles').delete().eq('id', userId);
     modal.remove(); window.TF?.toast?.(`${userName} permanently deleted`, 'success');
-    const route = getCurrentRoute(); if (route) renderView(route);
+    const route = getCurrentRoute(); if (route) refreshView(route);
   });
 };
 
@@ -1254,7 +1273,7 @@ window._bulkDeleteTenders = async () => {
     await supabase.from('tenders').delete().eq('id', id);
   }
   window.TF?.toast?.(`${ids.length} tender(s) deleted`, 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
 
 // ── Bulk Task Actions ─────────────────────────────────────────────────────────
@@ -1283,5 +1302,5 @@ window._bulkDeleteTasks = async (tenderId) => {
     await supabase.from('tasks').delete().eq('id', id);
   }
   window.TF?.toast?.(`${ids.length} task(s) deleted`, 'success');
-  const route = getCurrentRoute(); if (route) renderView(route);
+  const route = getCurrentRoute(); if (route) refreshView(route);
 };
