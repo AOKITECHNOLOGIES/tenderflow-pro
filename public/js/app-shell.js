@@ -371,7 +371,26 @@ const views = {
           ${!isLocked && hasRoleLevel('bid_manager') ? `<a href="#/tenders/${id}/compile" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition">Compile & Submit</a>` : ''}
         </div>
       </div>
-      ${tender.ai_analysis ? `<div class="bg-violet-500/5 border border-violet-500/20 rounded-xl p-5"><h3 class="text-sm font-semibold text-violet-300 mb-2">AI Analysis Summary</h3><p class="text-xs text-slate-400">${tender.ai_analysis.summary || 'Analysis complete.'}</p></div>` : ''}
+      ${tender.ai_analysis ? `<div class="bg-violet-500/5 border border-violet-500/20 rounded-xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-violet-500/20 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-violet-300">AI Analysis</h3>
+          <span class="text-xs text-violet-400/60">${(tender.ai_analysis.information_items || []).length} info items · ${tender.ai_analysis.total_requirements || (tender.ai_analysis.requirements || []).length} requirements</span>
+        </div>
+        ${tender.ai_analysis.summary ? `<div class="px-5 py-4 border-b border-violet-500/10">
+          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Summary</p>
+          <p class="text-sm text-slate-300 leading-relaxed">${tender.ai_analysis.summary}</p>
+        </div>` : ''}
+        ${(tender.ai_analysis.information_items || []).length > 0 ? `<div class="px-5 py-4">
+          <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Key Information for Bid Team</p>
+          <div class="grid gap-2">
+            ${(tender.ai_analysis.information_items || []).slice(0, 10).map(item => `<div class="flex gap-3 p-3 bg-surface-900/60 rounded-lg border border-slate-700/30">
+              <span class="shrink-0 w-2 h-2 rounded-full mt-1.5 ${item.importance === 'high' ? 'bg-amber-400' : item.importance === 'medium' ? 'bg-brand-400' : 'bg-slate-500'}"></span>
+              <div class="min-w-0"><p class="text-xs font-medium text-slate-300">${item.title}</p><p class="text-xs text-slate-500 mt-0.5 leading-relaxed">${item.detail}</p></div>
+            </div>`).join('')}
+            ${(tender.ai_analysis.information_items || []).length > 10 ? `<p class="text-xs text-slate-500 px-1">+ ${(tender.ai_analysis.information_items || []).length - 10} more items stored</p>` : ''}
+          </div>
+        </div>` : ''}
+      </div>` : ''}
       <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-700/40 flex items-center justify-between">
           <h2 class="text-sm font-semibold text-white">Tasks (${(tasks || []).length})</h2>
