@@ -72,10 +72,19 @@ function statusBadge(status) {
 async function getDepartments() {
   const profile = getProfile();
   const companyId = _selectedCompanyId || profile.company_id;
-  let query = supabase.from('profiles').select('department').not('department', 'is', null);
-  if (companyId) query = query.eq('company_id', companyId);
-  const { data } = await query;
-  return [...new Set((data || []).map(d => d.department).filter(Boolean))].sort();
+  if (!companyId) return [];
+  // Read from dedicated departments table
+  const { data } = await supabase.from('departments')
+    .select('name')
+    .eq('company_id', companyId)
+    .order('name');
+  if (data?.length) return data.map(d => d.name);
+  // Fallback: read from profiles if departments table is empty (migration path)
+  const { data: profileDepts } = await supabase.from('profiles')
+    .select('department')
+    .not('department', 'is', null)
+    .eq('company_id', companyId);
+  return [...new Set((profileDepts || []).map(d => d.department).filter(Boolean))].sort();
 }
 
 function renderSidebar() {
@@ -1014,47 +1023,108 @@ window._editUser = async (userId) => {
 };
 
 window._manageDepartments = async () => {
-  const departments = await getDepartments();
+  const profile = getProfile();
+  const companyId = _selectedCompanyId || profile.company_id;
+
+  async function loadDepts() {
+    const { data } = await supabase.from('departments')
+      .select('id, name').eq('company_id', companyId).order('name');
+    return data || [];
+  }
+
+  function renderDeptList(depts) {
+    const list = document.getElementById('dept-list');
+    if (!list) return;
+    if (!depts.length) {
+      list.innerHTML = '<p class="text-sm text-slate-500 px-3">No departments yet.</p>';
+      return;
+    }
+    list.innerHTML = depts.map(d => `
+      <div class="flex items-center justify-between px-3 py-2 bg-surface-900/60 rounded-lg" data-dept-id="${d.id}">
+        <span class="text-sm text-white">${d.name}</span>
+        <div class="flex gap-2">
+          <button onclick="window._renameDepartmentById('${d.id}', '${d.name.replace(/'/g, "\'")}')" class="text-xs text-brand-400 hover:text-brand-300">Rename</button>
+          <button onclick="window._deleteDepartment('${d.id}', '${d.name.replace(/'/g, "\'")}')" class="text-xs text-red-400 hover:text-red-300">Delete</button>
+        </div>
+      </div>`).join('');
+  }
+
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
   modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-    <h3 class="text-lg font-semibold text-white mb-4">Manage Departments</h3>
+    <h3 class="text-lg font-semibold text-white mb-1">Manage Departments</h3>
+    <p class="text-xs text-slate-500 mb-4">Departments are saved permanently and available when assigning users.</p>
+    <div id="dept-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
     <div id="dept-list" class="space-y-2 mb-4 max-h-64 overflow-y-auto">
-      ${departments.length > 0 ? departments.map(d => `
-        <div class="flex items-center justify-between px-3 py-2 bg-surface-900/60 rounded-lg">
-          <span class="text-sm text-white">${d}</span>
-          <button onclick="window._renameDepartment('${d}')" class="text-xs text-brand-400 hover:text-brand-300">Rename</button>
-        </div>`).join('') : '<p class="text-sm text-slate-500 px-3">No departments yet.</p>'}
+      <p class="text-xs text-slate-500 px-3">Loading...</p>
     </div>
     <div class="flex gap-2 mb-4">
-      <input id="new-dept-input" type="text" placeholder="New department name" class="flex-1 px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+      <input id="new-dept-input" type="text" placeholder="New department name e.g. Finance" class="flex-1 px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
       <button id="add-dept-btn" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Add</button>
     </div>
     <button id="dept-close" class="w-full py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg hover:bg-slate-700/20">Close</button>
   </div>`;
   document.body.appendChild(modal);
+
+  // Load and render
+  const depts = await loadDepts();
+  renderDeptList(depts);
+
   modal.querySelector('#dept-close').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-  modal.querySelector('#add-dept-btn').addEventListener('click', () => {
-    const name = modal.querySelector('#new-dept-input').value.trim();
+
+  modal.querySelector('#add-dept-btn').addEventListener('click', async () => {
+    const input = modal.querySelector('#new-dept-input');
+    const errEl = modal.querySelector('#dept-error');
+    const name = input.value.trim();
     if (!name) return;
-    const item = document.createElement('div');
-    item.className = 'flex items-center justify-between px-3 py-2 bg-surface-900/60 rounded-lg';
-    item.innerHTML = `<span class="text-sm text-white">${name}</span><button onclick="window._renameDepartment('${name}')" class="text-xs text-brand-400 hover:text-brand-300">Rename</button>`;
-    modal.querySelector('#dept-list').appendChild(item);
-    modal.querySelector('#new-dept-input').value = '';
-    window.TF?.toast?.(`Department "${name}" added — assign it to users to activate`, 'info');
+    errEl.classList.add('hidden');
+    const { error } = await supabase.from('departments').insert({ name, company_id: companyId });
+    if (error) {
+      errEl.textContent = error.code === '23505' ? `"${name}" already exists.` : error.message;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    input.value = '';
+    window.TF?.toast?.(`Department "${name}" saved`, 'success');
+    const updated = await loadDepts();
+    renderDeptList(updated);
+  });
+
+  // Enter key to add
+  modal.querySelector('#new-dept-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') modal.querySelector('#add-dept-btn').click();
   });
 };
 
-window._renameDepartment = async (oldName) => {
+window._renameDepartmentById = async (deptId, oldName) => {
   const newName = prompt(`Rename "${oldName}" to:`, oldName);
-  if (!newName || newName === oldName) return;
+  if (!newName || newName.trim() === oldName) return;
   const profile = getProfile();
-  await supabase.from('profiles').update({ department: newName }).eq('department', oldName).eq('company_id', _selectedCompanyId || profile.company_id);
-  window.TF?.toast?.(`Department renamed to "${newName}"`, 'success');
-  const route = getCurrentRoute(); if (route) refreshView(route);
+  const companyId = _selectedCompanyId || profile.company_id;
+  const { error } = await supabase.from('departments')
+    .update({ name: newName.trim() }).eq('id', deptId);
+  if (error) { window.TF?.toast?.(`Rename failed: ${error.message}`, 'error'); return; }
+  // Also update existing users with this department name
+  await supabase.from('profiles').update({ department: newName.trim() })
+    .eq('department', oldName).eq('company_id', companyId);
+  window.TF?.toast?.(`Renamed to "${newName.trim()}"`, 'success');
+  window._manageDepartments(); // Reopen with fresh data
 };
+
+window._deleteDepartment = async (deptId, name) => {
+  if (!confirm(`Delete department "${name}"?\n\nUsers assigned to this department will have their department cleared.`)) return;
+  const profile = getProfile();
+  const companyId = _selectedCompanyId || profile.company_id;
+  await supabase.from('profiles').update({ department: null })
+    .eq('department', name).eq('company_id', companyId);
+  const { error } = await supabase.from('departments').delete().eq('id', deptId);
+  if (error) { window.TF?.toast?.(`Delete failed: ${error.message}`, 'error'); return; }
+  window.TF?.toast?.(`Department "${name}" deleted`, 'success');
+  window._manageDepartments();
+};
+
+// _renameDepartment replaced by _renameDepartmentById
 
 window._createUser = async () => {
   const profile = getProfile();
