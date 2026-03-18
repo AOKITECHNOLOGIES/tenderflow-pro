@@ -8,7 +8,7 @@ import { getRouteParams, getCurrentRoute, navigate } from './router.js';
 import { renderView, refreshView } from './app-shell.js';
 
 // ── Route-specific post-render hooks ─────────────────────────────────────────
-export function attachRouteHandlers(route) {
+export function attachDynamicHandlers(route) {
   switch (route.view) {
     case 'tender-create':   attachTenderCreateHandlers(); break;
     case 'tender-detail':   attachTenderDetailHandlers(); break;
