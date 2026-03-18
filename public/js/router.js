@@ -35,6 +35,7 @@ const routes = {
   // IT Admin+
   '/users':            { view: 'users',             auth: true,  role: 'it_admin' },
   '/audit':            { view: 'audit',             auth: true,  role: 'it_admin' },
+  '/settings':         { view: 'settings',          auth: true,  role: 'it_admin' },
 
   // Super Admin
   '/admin/companies':  { view: 'admin-companies',   auth: true,  role: 'super_admin' },
@@ -203,7 +204,7 @@ export function getSidebarItems(role) {
     });
   }
 
-  // Users & Audit — it_admin+
+  // Users, Audit, Settings — it_admin+
   if (hasRoleLevel('it_admin')) {
     items.push({ type: 'divider', label: 'Administration' });
     items.push({
@@ -216,6 +217,12 @@ export function getSidebarItems(role) {
       label: 'Audit Log',
       icon: 'shield',
       path: '/audit',
+      roles: ['it_admin', 'super_admin'],
+    });
+    items.push({
+      label: 'Settings',
+      icon: 'settings',
+      path: '/settings',
       roles: ['it_admin', 'super_admin'],
     });
   }

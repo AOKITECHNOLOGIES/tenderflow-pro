@@ -760,7 +760,24 @@ const views = {
   },
 
   async 'admin-settings'() {
-    return `<div class="view-enter"><h1 class="text-xl font-bold text-white mb-4">System Settings</h1><p class="text-slate-400">Global configuration will be available here.</p></div>`;
+    const { renderSettingsView } = await import('./company-settings.js');
+    const html = await renderSettingsView();
+    // Init after render
+    setTimeout(async () => {
+      const { initSettingsView } = await import('./company-settings.js');
+      await initSettingsView();
+    }, 50);
+    return html;
+  },
+
+  async 'settings'() {
+    const { renderSettingsView } = await import('./company-settings.js');
+    const html = await renderSettingsView();
+    setTimeout(async () => {
+      const { initSettingsView } = await import('./company-settings.js');
+      await initSettingsView();
+    }, 50);
+    return html;
   },
 
   async 'tender-compile'() {
