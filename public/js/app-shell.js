@@ -823,6 +823,9 @@ export function mountAppShell() {
       </div>
     </main>`;
   if (isSuperAdmin()) loadCompaniesForScope();
+
+  // Mount AI chat for bid_manager+
+  import('./ai-chat.js').then(({ mountAIChat }) => mountAIChat()).catch(() => {});
 }
 
 async function loadCompaniesForScope() {
