@@ -140,7 +140,7 @@ async function uploadRFQ(file, tenderId, profile) {
 
     setProgress(75, 'Creating tasks...', 'Building your task list from the document');
     const { data: parseResult, error: parseErr } = await supabase.functions.invoke('parse-document', {
-      body: { tender_id: tenderId, text, mode: 'rfq' },
+      body: { tender_id: tenderId, document_text: text, mode: 'rfq' },
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
 
