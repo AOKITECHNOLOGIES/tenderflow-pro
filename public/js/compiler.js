@@ -286,3 +286,47 @@ export async function triggerDocumentParse(tenderId, fileText, replaceExisting) 
   if (!response.data?.success) throw new Error(response.data?.error || 'No data returned');
   return response.data;
 }
+
+// ── compileAndDownload: used by wiring.js compile handler ───────────────────
+export async function compileAndDownload(tender, tasks) {
+    const SECTION_ORDER = [
+          'executive_summary', 'company_profile', 'project_approach', 'methodology',
+          'technical_proposal', 'timeline', 'project_plan', 'cv_key_personnel',
+          'past_experience', 'references', 'quality_assurance', 'health_safety',
+          'environmental', 'risk_management', 'pricing', 'financial_proposal',
+          'bbbee_certificate', 'tax_clearance', 'compliance', 'insurance', 'terms_conditions',
+        ];
+
+  const profile = getProfile();
+    const companyName = tender.companies?.name || profile?.companies?.name || 'Company';
+
+  const sortedTasks = [...(tasks || [])].sort((a, b) => {
+        const ai = SECTION_ORDER.indexOf(a.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(a.section_type);
+        const bi = SECTION_ORDER.indexOf(b.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(b.section_type);
+        return ai - bi;
+  });
+
+  const compiledSections = sortedTasks
+      .filter(t => t.status === 'approved' || t.content)
+      .map(t => ({
+              title: t.title,
+              section_type: t.section_type,
+              content: t.content || '[No content provided]',
+              author: t.profiles?.full_name || 'Unknown',
+              department: t.profiles?.department || 'General',
+              status: t.status,
+              is_mandatory: t.is_mandatory,
+      }));
+
+  const htmlDocument = generateCompiledHTML({
+        tender,
+        companyName,
+        logoUrl: tender.companies?.logo_url || null,
+        sections: compiledSections,
+        generatedAt: new Date().toISOString(),
+        generatedBy: profile?.full_name || 'Unknown',
+  });
+
+  const filename = (tender.title || 'tender').replace(/[^a-z0-9]/gi, '-').toLowerCase() + '-proposal.html';
+    downloadHTML(htmlDocument, filename);
+}
