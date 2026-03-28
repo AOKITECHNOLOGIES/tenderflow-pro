@@ -500,4 +500,4 @@ window._updateSubscription = async (companyId) => {
   }
 };
 
-console.log('[TenderFlow] Company settings module loaded');
+
