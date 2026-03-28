@@ -376,12 +376,15 @@ const views = {
           </div>
         </div>
         <div class="flex gap-2">
-          ${!isLocked && hasRoleLevel('it_admin') ? `
-            <button onclick="window._editTender('${id}')" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">Edit</button>
-            <button onclick="window._deleteTender('${id}')" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition">Delete</button>
-          ` : ''}
-          ${!isLocked && hasRoleLevel('bid_manager') ? `<a href="#/tenders/${id}/compile" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition">Compile & Submit</a>` : ''}
-        </div>
+  ${!isLocked && hasRoleLevel('it_admin') ? `
+    <button onclick="window._editTender('${id}')" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">Edit</button>
+    <button onclick="window._deleteTender('${id}')" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition">Delete</button>
+  ` : ''}
+  ${isLocked && isSuperAdmin() ? `
+    <button onclick="window._unlockTender('${id}')" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition">🔓 Unlock Tender</button>
+  ` : ''}
+  ${!isLocked && hasRoleLevel('bid_manager') ? `<a href="#/tenders/${id}/compile" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition">Compile & Submit</a>` : ''}
+</div>
       </div>
       ${tender.ai_analysis ? `<div class="bg-violet-500/5 border border-violet-500/20 rounded-xl overflow-hidden">
         <div class="px-5 py-4 border-b border-violet-500/20 flex items-center justify-between">
@@ -1119,6 +1122,19 @@ window._deleteTender = async (tenderId) => {
   navigate('/tenders');
 };
 
+window._unlockTender = async (tenderId) => {
+  if (!confirm('Unlock this tender? This will set it back to "in_progress" and allow editing and re-submission.')) return;
+  const { error } = await supabase.from('tenders')
+    .update({ status: 'in_progress' })
+    .eq('id', tenderId);
+  if (error) { window.TF?.toast?.(`Unlock failed: ${error.message}`, 'error'); return; }
+  await supabase.from('documents')
+    .update({ is_locked: false })
+    .eq('tender_id', tenderId);
+  window.TF?.toast?.('Tender unlocked — you can now edit and re-submit', 'success');
+  const route = getCurrentRoute();
+  if (route) refreshView(route);
+};
 // ── User Management ──────────────────────────────────────────────────────────
 window._toggleUser = async (userId, active) => {
   await supabase.from('profiles').update({ is_active: active }).eq('id', userId);
