@@ -155,6 +155,31 @@ async function renderBrandingTab(companyId) {
 
     <div class="grid grid-cols-2 gap-4">
       <div>
+        <label class="block text-sm text-slate-300 mb-1">Document Font</label>
+        <select id="br-font" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+          <option value="Calibri" ${(b.document_font || 'Calibri') === 'Calibri' ? 'selected' : ''}>Calibri (Default)</option>
+          <option value="Arial" ${b.document_font === 'Arial' ? 'selected' : ''}>Arial</option>
+          <option value="Times New Roman" ${b.document_font === 'Times New Roman' ? 'selected' : ''}>Times New Roman</option>
+          <option value="Georgia" ${b.document_font === 'Georgia' ? 'selected' : ''}>Georgia</option>
+          <option value="Montserrat" ${b.document_font === 'Montserrat' ? 'selected' : ''}>Montserrat</option>
+          <option value="Helvetica" ${b.document_font === 'Helvetica' ? 'selected' : ''}>Helvetica</option>
+          <option value="Garamond" ${b.document_font === 'Garamond' ? 'selected' : ''}>Garamond</option>
+          <option value="Trebuchet MS" ${b.document_font === 'Trebuchet MS' ? 'selected' : ''}>Trebuchet MS</option>
+        </select>
+        <p class="text-xs text-slate-500 mt-1">Applied to all compiled tender documents</p>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-300 mb-1">Font Size (body)</label>
+        <select id="br-fontsize" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+          <option value="20" ${(b.document_font_size || '20') === '20' ? 'selected' : ''}>10pt (Default)</option>
+          <option value="22" ${b.document_font_size === '22' ? 'selected' : ''}>11pt</option>
+          <option value="24" ${b.document_font_size === '24' ? 'selected' : ''}>12pt</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
         <label class="block text-sm text-slate-300 mb-1">Proposal Header Text</label>
         <textarea id="br-header" rows="2" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm resize-none">${b.proposal_header || ''}</textarea>
       </div>
@@ -203,6 +228,8 @@ window._saveBranding = async (companyId) => {
     proposal_header: document.getElementById('br-header')?.value || null,
     proposal_footer: document.getElementById('br-footer')?.value || null,
     cover_template: document.getElementById('br-cover')?.value || 'default',
+    document_font: document.getElementById('br-font')?.value || 'Calibri',
+    document_font_size: document.getElementById('br-fontsize')?.value || '20',
   };
 
   const { error } = await supabase.from('company_branding')
