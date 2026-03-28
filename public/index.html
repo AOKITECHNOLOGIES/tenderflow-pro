@@ -9,6 +9,30 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230ea5e9'/><text x='50%25' y='55%25' text-anchor='middle' dominant-baseline='central' fill='white' font-size='18' font-weight='bold'>T</text></svg>" />
   <title>TenderFlow Pro</title>
 
+  <!-- Console noise suppressor — must be first, before any other scripts -->
+  <script>
+    (function () {
+      var _warn = console.warn.bind(console);
+      console.warn = function () {
+        var msg = (arguments[0] || '').toString();
+        if (msg.indexOf('cdn.tailwindcss.com') !== -1) return;
+        _warn.apply(console, arguments);
+      };
+      var _log = console.log.bind(console);
+      console.log = function () {
+        var msg = (arguments[0] || '').toString();
+        if (
+          msg.indexOf('[TenderFlow]') !== -1 ||
+          msg.indexOf('[Auth]') !== -1 ||
+          msg.indexOf('[Sync]') !== -1 ||
+          msg.indexOf('[PDF]') !== -1 ||
+          msg.indexOf('[KB]') !== -1
+        ) return;
+        _log.apply(console, arguments);
+      };
+    })();
+  </script>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -42,7 +66,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet" />
   <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-
 
   <style>
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -293,18 +316,15 @@
         showApp();
         syncDraftsToServer();
 
-        // Import modules (browser caches these after first load)
         const { mountAppShell, renderView } = await import('./js/app-shell.js');
         await import('./js/wiring.js');
         await import('./js/batch2-wiring.js');
 
-        // Only mount the shell once — never rebuild it
         if (!_shellMounted) {
           mountAppShell();
           _shellMounted = true;
         }
 
-        // If a route was stored before auth resolved, navigate there now
         const intended = sessionStorage.getItem('tf_intended_route');
         if (intended) {
           sessionStorage.removeItem('tf_intended_route');
@@ -317,7 +337,6 @@
           }
         }
 
-        // Only show welcome toast on actual user-initiated login
         if (_isFirstLogin) {
           toast(`Welcome back, ${profile.full_name}`, 'success');
           _isFirstLogin = false;
@@ -406,17 +425,14 @@
     await import('./js/batch2-wiring.js');
 
     initRouter((route, params) => {
-      // Public routes — show auth screens
       if (['login', 'signup', 'forgot-password', 'reset-password'].includes(route.view)) {
         showAuth(route.view);
         return;
       }
-      // Shell not ready yet — store intended route, auth handler will redirect after login
       if (!_shellMounted) {
         sessionStorage.setItem('tf_intended_route', window.location.hash);
         return;
       }
-      // Shell is ready — render the view
       renderView(route).then(() => {
         import('./js/wiring.js').then(({ attachDynamicHandlers }) => {
           if (attachDynamicHandlers) attachDynamicHandlers(route);
@@ -427,14 +443,12 @@
     // ── Boot ──────────────────────────────────────────────────────────────────
     initAuth();
 
-    // SW disabled during development
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then((registrations) => {
         for (const registration of registrations) registration.unregister();
       });
     }
 
-    // Fallback: if loading screen is still showing after 4s, check session
     setTimeout(async () => {
       const loading = document.getElementById('loading-screen');
       if (!loading.classList.contains('hidden')) {
