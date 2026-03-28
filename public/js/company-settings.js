@@ -198,6 +198,19 @@ async function renderBrandingTab(companyId) {
       </select>
     </div>
 
+    <div class="border-t border-slate-700/40 pt-4">
+      <h4 class="text-sm font-medium text-white mb-2">Auto-extract from CI Kit</h4>
+      <p class="text-xs text-slate-500 mb-3">Upload a PDF brand guidelines document and we'll extract colours, fonts, logo and tagline automatically. You can review and adjust before saving.</p>
+      <div class="flex gap-3 items-center flex-wrap">
+        <input id="br-ci-file" type="file" accept=".pdf" class="text-sm text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-violet-500/20 file:text-violet-400 hover:file:bg-violet-500/30" />
+        <button onclick="window._extractCIKit('${companyId}')" class="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+          Extract from CI Kit
+        </button>
+      </div>
+      <div id="ci-extract-status" class="hidden mt-3 p-3 rounded-lg text-sm"></div>
+    </div>
+
     <button onclick="window._saveBranding('${companyId}')" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">Save Branding</button>
   </div>`;
 
@@ -525,6 +538,298 @@ window._updateSubscription = async (companyId) => {
     msgEl.textContent = error ? error.message : 'Subscription updated ✓';
     msgEl.classList.remove('hidden');
   }
+  // ── CI Kit Extraction ────────────────────────────────────────────────────────
+
+window._extractCIKit = async (companyId) => {
+  const fileInput = document.getElementById('br-ci-file');
+  const statusEl = document.getElementById('ci-extract-status');
+  const file = fileInput?.files?.[0];
+
+  if (!file) {
+    statusEl.className = 'mt-3 p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400';
+    statusEl.textContent = 'Please select a PDF file first.';
+    statusEl.classList.remove('hidden');
+    return;
+  }
+
+  // Show loading state
+  statusEl.className = 'mt-3 p-3 rounded-lg text-sm bg-violet-500/10 border border-violet-500/20 text-violet-400';
+  statusEl.innerHTML = `
+    <div class="flex items-center gap-2 mb-2">
+      <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      <span id="ci-step">Reading PDF...</span>
+    </div>
+    <div class="w-full bg-violet-900/30 rounded-full h-1.5">
+      <div id="ci-progress" class="bg-violet-400 h-1.5 rounded-full transition-all duration-500" style="width:10%"></div>
+    </div>`;
+  statusEl.classList.remove('hidden');
+
+  function setStep(msg, pct) {
+    const stepEl = document.getElementById('ci-step');
+    const progEl = document.getElementById('ci-progress');
+    if (stepEl) stepEl.textContent = msg;
+    if (progEl) progEl.style.width = pct + '%';
+  }
+
+  try {
+    // ── Step 1: Load PDF ──
+    const pdfjs = window.pdfjsLib;
+    if (!pdfjs) throw new Error('PDF.js not loaded');
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+      pdfjs.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    setStep(`PDF loaded — ${pdf.numPages} pages. Extracting text...`, 20);
+
+    // ── Step 2: Extract text from first 5 pages ──
+    let fullText = '';
+    const pagesToScan = Math.min(pdf.numPages, 5);
+    for (let i = 1; i <= pagesToScan; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      fullText += content.items.map(item => item.str).join(' ') + '\n\n';
+    }
+    setStep('Text extracted. Sampling colours...', 40);
+
+    // ── Step 3: Extract colours from first 3 pages via canvas ──
+    const extractedColors = await extractColorsFromPDF(pdf, Math.min(pdf.numPages, 3));
+    setStep('Colours sampled. Uploading logo...', 60);
+
+    // ── Step 4: Try to extract logo from first page ──
+    let logoUrl = null;
+    try {
+      logoUrl = await extractLogoFromPDF(pdf, companyId);
+    } catch (e) {
+      // Logo extraction optional — continue
+    }
+    setStep('Analysing with AI...', 75);
+
+    // ── Step 5: Send text to AI for brand info extraction ──
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: aiResult, error: aiErr } = await supabase.functions.invoke('ai-chat', {
+      body: {
+        system: `You are a brand analyst. Extract brand information from the provided CI/brand guidelines document text.
+Return ONLY a valid JSON object with these exact keys (use null for anything not found):
+{
+  "company_name": "string or null",
+  "tagline": "string or null",
+  "primary_color": "hex color like #0ea5e9 or null",
+  "secondary_color": "hex color like #0f172a or null",
+  "accent_color": "hex color like #38bdf8 or null",
+  "font_primary": "font name string or null",
+  "font_secondary": "font name string or null",
+  "proposal_header": "any header/intro text for documents or null",
+  "proposal_footer": "any footer/confidentiality text or null"
+}
+Look for: hex codes (#xxxxxx), RGB values, Pantone references (convert to approximate hex), font names (look for words like "font", "typeface", "typography"), taglines (short brand phrases), and document header/footer templates.`,
+        messages: [{
+          role: 'user',
+          content: `Extract brand information from this CI kit text:\n\n${fullText.substring(0, 8000)}`,
+        }],
+        max_tokens: 800,
+      },
+    });
+
+    setStep('Processing results...', 90);
+
+    // Parse AI response
+    let brandInfo = {};
+    if (!aiErr && aiResult?.content?.[0]?.text) {
+      try {
+        const raw = aiResult.content[0].text;
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) brandInfo = JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        // AI parse failed — use colour extraction only
+      }
+    }
+
+    // ── Step 6: Merge AI results with canvas colour extraction ──
+    // Prefer AI-found colours, fall back to canvas-sampled colours
+    const finalColors = {
+      primary:   brandInfo.primary_color   || extractedColors[0] || null,
+      secondary: brandInfo.secondary_color || extractedColors[1] || null,
+      accent:    brandInfo.accent_color    || extractedColors[2] || null,
+    };
+
+    // ── Step 7: Populate form fields ──
+    if (brandInfo.tagline) {
+      const taglineEl = document.getElementById('br-tagline');
+      if (taglineEl) taglineEl.value = brandInfo.tagline;
+    }
+
+    if (brandInfo.proposal_header) {
+      const headerEl = document.getElementById('br-header');
+      if (headerEl) headerEl.value = brandInfo.proposal_header;
+    }
+
+    if (brandInfo.proposal_footer) {
+      const footerEl = document.getElementById('br-footer');
+      if (footerEl) footerEl.value = brandInfo.proposal_footer;
+    }
+
+    if (finalColors.primary) {
+      const el = document.getElementById('br-primary');
+      if (el) { el.value = finalColors.primary; el.nextElementSibling.value = finalColors.primary; }
+    }
+    if (finalColors.secondary) {
+      const el = document.getElementById('br-secondary');
+      if (el) { el.value = finalColors.secondary; el.nextElementSibling.value = finalColors.secondary; }
+    }
+    if (finalColors.accent) {
+      const el = document.getElementById('br-accent');
+      if (el) { el.value = finalColors.accent; el.nextElementSibling.value = finalColors.accent; }
+    }
+
+    if (brandInfo.font_primary) {
+      const fontEl = document.getElementById('br-font');
+      if (fontEl) {
+        // Check if font exists in dropdown, otherwise set closest match
+        const options = [...fontEl.options].map(o => o.value.toLowerCase());
+        const match = options.findIndex(o => o.includes(brandInfo.font_primary.toLowerCase().split(' ')[0]));
+        if (match >= 0) fontEl.selectedIndex = match;
+      }
+    }
+
+    if (logoUrl) {
+      const logoEl = document.getElementById('br-logo');
+      if (logoEl) logoEl.value = logoUrl;
+    }
+
+    // ── Show results summary ──
+    const found = [];
+    if (finalColors.primary)        found.push('primary colour');
+    if (finalColors.secondary)      found.push('secondary colour');
+    if (finalColors.accent)         found.push('accent colour');
+    if (brandInfo.font_primary)     found.push(`font (${brandInfo.font_primary})`);
+    if (brandInfo.tagline)          found.push('tagline');
+    if (logoUrl)                    found.push('logo');
+    if (brandInfo.proposal_header)  found.push('header text');
+    if (brandInfo.proposal_footer)  found.push('footer text');
+
+    statusEl.className = 'mt-3 p-3 rounded-lg text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-400';
+    statusEl.innerHTML = `
+      <p class="font-medium mb-1">✓ Extraction complete!</p>
+      <p>Found: ${found.length > 0 ? found.join(', ') : 'limited data — manual entry recommended'}</p>
+      ${brandInfo.company_name ? `<p class="mt-1 text-xs text-emerald-300">Detected company: ${brandInfo.company_name}</p>` : ''}
+      <p class="mt-2 text-xs text-emerald-300/70">Review the populated fields above and click Save Branding when ready.</p>`;
+
+  } catch (err) {
+    statusEl.className = 'mt-3 p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400';
+    statusEl.textContent = `Extraction failed: ${err.message}`;
+  }
 };
+
+// ── Extract dominant colours from PDF pages via canvas ───────────────────────
+async function extractColorsFromPDF(pdf, numPages) {
+  const colorCounts = {};
+
+  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    try {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 0.5 }); // Small scale for speed
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      // Sample pixels on a grid
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const step = 8; // Sample every 8th pixel
+
+      for (let i = 0; i < imageData.length; i += 4 * step) {
+        const r = imageData[i];
+        const g = imageData[i + 1];
+        const b = imageData[i + 2];
+        const a = imageData[i + 3];
+
+        // Skip transparent, near-white, and near-black pixels
+        if (a < 128) continue;
+        if (r > 240 && g > 240 && b > 240) continue; // white
+        if (r < 15  && g < 15  && b < 15)  continue; // black
+
+        // Quantize to reduce colour space (round to nearest 16)
+        const qr = Math.round(r / 16) * 16;
+        const qg = Math.round(g / 16) * 16;
+        const qb = Math.round(b / 16) * 16;
+        const hex = '#' + [qr, qg, qb].map(v => v.toString(16).padStart(2, '0')).join('');
+
+        colorCounts[hex] = (colorCounts[hex] || 0) + 1;
+      }
+    } catch (e) {
+      // Page render failed — skip
+    }
+  }
+
+  // Sort by frequency and return top 3 distinct colours
+  const sorted = Object.entries(colorCounts)
+    .sort(([, a], [, b]) => b - a)
+    .map(([hex]) => hex);
+
+  // Filter out colours too similar to each other
+  const distinct = [];
+  for (const color of sorted) {
+    if (distinct.length >= 3) break;
+    const isTooSimilar = distinct.some(existing => colorDistance(color, existing) < 60);
+    if (!isTooSimilar) distinct.push(color);
+  }
+
+  return distinct;
+}
+
+// ── Colour distance (simple Euclidean in RGB space) ──────────────────────────
+function colorDistance(hex1, hex2) {
+  const parse = h => [
+    parseInt(h.slice(1, 3), 16),
+    parseInt(h.slice(3, 5), 16),
+    parseInt(h.slice(5, 7), 16),
+  ];
+  const [r1, g1, b1] = parse(hex1);
+  const [r2, g2, b2] = parse(hex2);
+  return Math.sqrt((r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2);
+}
+
+// ── Extract logo from first page (saves as PNG to storage) ───────────────────
+async function extractLogoFromPDF(pdf, companyId) {
+  const page = await pdf.getPage(1);
+
+  // Render top quarter of first page at high res — logos are usually there
+  const fullViewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement('canvas');
+  canvas.width = fullViewport.width;
+  canvas.height = Math.round(fullViewport.height * 0.25); // Top 25% only
+  const ctx = canvas.getContext('2d');
+
+  await page.render({
+    canvasContext: ctx,
+    viewport: fullViewport,
+    transform: [1, 0, 0, 1, 0, 0],
+  }).promise;
+
+  // Convert canvas to blob
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  if (!blob || blob.size < 1000) return null; // Too small — skip
+
+  // Upload to Supabase storage
+  const path = `${companyId}/branding/ci_logo_${Date.now()}.png`;
+  const { error } = await supabase.storage
+    .from('tender-documents')
+    .upload(path, blob, { contentType: 'image/png', upsert: true });
+
+  if (error) return null;
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('tender-documents')
+    .getPublicUrl(path);
+
+  return publicUrl;
+}
+};
+
 
 
