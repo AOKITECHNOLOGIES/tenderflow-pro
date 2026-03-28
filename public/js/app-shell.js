@@ -153,7 +153,7 @@ function buildLivePreview(tender, tasks) {
     return ai - bi;
   });
   const sectionsHtml = sorted.map((task, i) => {
-    if (task.status === 'approved' && task.content) {
+    if (task.content) {
       const imgs = (task.images || []).map(img =>
         `<img src="${img.url}" alt="${img.name}" style="max-width:100%;margin:8px 0;border-radius:6px;border:1px solid #e2e8f0;" />`
       ).join('');
