@@ -309,4 +309,4 @@ window._generateFullReport = async () => {
   window.TF?.toast?.('Full report downloaded', 'success');
 };
 
-console.log('[TenderFlow] Reports module loaded');
+
