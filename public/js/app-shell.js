@@ -1645,8 +1645,17 @@ window._addTask = async (tenderId) => {
       is_mandatory: modal.querySelector('#at-mandatory').checked,
       status: 'unassigned',
     };
-    const { error } = await supabase.from('tasks').insert(insertData);
-    if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Add Task'; return; }
+    const { data: insertedTask, error } = await supabase.from('tasks').insert(insertData).select().single();
+    if (error) {
+      // Surface the full Supabase error so we can diagnose schema issues
+      const detail = error.details ? ` (${error.details})` : '';
+      const hint = error.hint ? ` Hint: ${error.hint}` : '';
+      errEl.textContent = error.message + detail + hint;
+      errEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = 'Add Task';
+      return;
+    }
     modal.remove();
     window.TF?.toast?.(`Task "${title}" added`, 'success');
     const route = getCurrentRoute(); if (route) refreshView(route);
