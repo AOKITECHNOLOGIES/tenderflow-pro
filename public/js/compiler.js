@@ -18,14 +18,12 @@ const SECTION_ORDER = [
   'bbbee_certificate', 'tax_clearance', 'compliance', 'insurance', 'terms_conditions',
 ];
 
-// ── Text truncation helper ───────────────────────────────────────────────────
 function truncateForAI(text, maxChars = 20000) {
   if (!text || text.length <= maxChars) return text;
   return text.substring(0, maxChars) + '\n\n[Document truncated for processing — ' +
     Math.round((text.length / maxChars) * 100) + '% of original length sent]';
 }
 
-// ── Strip HTML helper ────────────────────────────────────────────────────────
 function stripHtml(html) {
   return (html || '')
     .replace(/<br\s*\/?>/gi, '\n')
@@ -41,7 +39,6 @@ function stripHtml(html) {
     .trim();
 }
 
-// ── Compile Tender ───────────────────────────────────────────────────────────
 export async function compileTender(tenderId) {
   const profile = getProfile();
 
@@ -120,7 +117,6 @@ export async function compileTender(tenderId) {
   };
 }
 
-// ── Submit & Lock Tender ─────────────────────────────────────────────────────
 export async function submitTender(tenderId, snapshotData) {
   const { error: updateError } = await supabase
     .from('tenders')
@@ -128,13 +124,10 @@ export async function submitTender(tenderId, snapshotData) {
     .eq('id', tenderId);
 
   if (updateError) throw new Error(`Submission failed: ${updateError.message}`);
-
   await supabase.from('documents').update({ is_locked: true }).eq('tender_id', tenderId);
-
   return { success: true };
 }
 
-// ── Generate Compiled HTML ───────────────────────────────────────────────────
 function generateCompiledHTML({ tender, companyName, logoUrl, sections, generatedAt, generatedBy }) {
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
 
@@ -224,13 +217,11 @@ function generateCompiledHTML({ tender, companyName, logoUrl, sections, generate
 </html>`;
 }
 
-// ── RFQ AI Analysis ──────────────────────────────────────────────────────────
 export async function triggerRFQAnalysis(tenderId, fileText) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 
   const truncatedText = truncateForAI(fileText);
-
   const response = await supabase.functions.invoke('parse-rfq', {
     body: { tender_id: tenderId, document_text: truncatedText },
     headers: { Authorization: `Bearer ${session.access_token}` },
@@ -238,11 +229,9 @@ export async function triggerRFQAnalysis(tenderId, fileText) {
 
   if (response.error) throw new Error(response.error.message || 'AI analysis failed');
   if (!response.data || !response.data.success) throw new Error(response.data?.error || 'AI analysis returned no data');
-
   return response.data;
 }
 
-// ── PDF/DOCX Text Extraction ─────────────────────────────────────────────────
 export async function extractTextFromFile(file) {
   if (file.type === 'application/pdf') {
     console.log('[PDF] Starting extraction:', file.name, file.size);
@@ -298,14 +287,11 @@ export async function extractTextFromFile(file) {
     }
   }
 
-  if (file.type.startsWith('text/')) {
-    return await file.text();
-  }
+  if (file.type.startsWith('text/')) return await file.text();
 
   throw new Error(`Unsupported file type: ${file.type}`);
 }
 
-// ── Download Helper ──────────────────────────────────────────────────────────
 export function downloadHTML(htmlContent, filename) {
   const blob = new Blob([htmlContent], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
@@ -318,13 +304,11 @@ export function downloadHTML(htmlContent, filename) {
   URL.revokeObjectURL(url);
 }
 
-// ── Document Section Parser ──────────────────────────────────────────────────
 export async function triggerDocumentParse(tenderId, fileText, replaceExisting) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 
   const truncatedText = truncateForAI(fileText);
-
   const response = await supabase.functions.invoke('parse-document', {
     body: { tender_id: tenderId, document_text: truncatedText, replace_existing: replaceExisting },
     headers: { Authorization: `Bearer ${session.access_token}` },
@@ -359,6 +343,9 @@ export async function compileAndDownload(tender, tasks) {
   const bodySize       = parseInt(b.document_font_size || '20');
   const headingSize    = bodySize + 10;
   const titleSize      = bodySize + 32;
+
+  // ── IMPORTANT: docx@8.5.0 requires font as { name: string }, not a plain string
+  const font = { name: documentFont };
 
   const noBorder   = { style: BorderStyle.NONE,   size: 0, color: 'FFFFFF' };
   const cellBorder = { style: BorderStyle.SINGLE,  size: 1, color: 'e2e8f0' };
@@ -404,12 +391,12 @@ export async function compileAndDownload(tender, tasks) {
 
   children.push(
     new Paragraph({
-      children: [new TextRun({ text: tender.title, bold: true, size: titleSize, color: secondaryColor, font: documentFont })],
+      children: [new TextRun({ text: tender.title, bold: true, size: titleSize, color: secondaryColor, font })],
       alignment: coverAlign,
       spacing: { before: 800, after: 300 },
     }),
     new Paragraph({
-      children: [new TextRun({ text: 'Tender Proposal', size: bodySize + 8, color: primaryColor, font: documentFont })],
+      children: [new TextRun({ text: 'Tender Proposal', size: bodySize + 8, color: primaryColor, font })],
       alignment: coverAlign,
       spacing: { after: 600 },
     }),
@@ -435,14 +422,14 @@ export async function compileAndDownload(tender, tasks) {
           width: { size: 30, type: WidthType.PERCENTAGE },
           borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
           children: [new Paragraph({
-            children: [new TextRun({ text: label, bold: true, size: bodySize - 2, color: '64748b', font: documentFont })],
+            children: [new TextRun({ text: label, bold: true, size: bodySize - 2, color: '64748b', font })],
           })],
         }),
         new TableCell({
           width: { size: 70, type: WidthType.PERCENTAGE },
           borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
           children: [new Paragraph({
-            children: [new TextRun({ text: value, size: bodySize - 2, font: documentFont })],
+            children: [new TextRun({ text: value, size: bodySize - 2, font })],
           })],
         }),
       ],
@@ -451,7 +438,7 @@ export async function compileAndDownload(tender, tasks) {
 
   if (proposalHeader) {
     children.push(new Paragraph({
-      children: [new TextRun({ text: proposalHeader, size: bodySize - 2, color: '94a3b8', italics: true, font: documentFont })],
+      children: [new TextRun({ text: proposalHeader, size: bodySize - 2, color: '94a3b8', italics: true, font })],
       spacing: { before: 400 },
     }));
   }
@@ -460,16 +447,16 @@ export async function compileAndDownload(tender, tasks) {
   children.push(new Paragraph({ children: [new PageBreak()] }));
 
   children.push(new Paragraph({
-    children: [new TextRun({ text: 'Table of Contents', bold: true, size: headingSize, color: primaryColor, font: documentFont })],
+    children: [new TextRun({ text: 'Table of Contents', bold: true, size: headingSize, color: primaryColor, font })],
     spacing: { before: 400, after: 300 },
   }));
 
   compiledSections.forEach((section, i) => {
     children.push(new Paragraph({
       children: [
-        new TextRun({ text: `${i + 1}. ${section.title}`, size: bodySize, font: documentFont }),
+        new TextRun({ text: `${i + 1}. ${section.title}`, size: bodySize, font }),
         section.is_mandatory
-          ? new TextRun({ text: '  [MANDATORY]', color: 'dc2626', size: bodySize - 2, bold: true, font: documentFont })
+          ? new TextRun({ text: '  [MANDATORY]', color: 'dc2626', size: bodySize - 2, bold: true, font })
           : new TextRun(''),
       ],
       spacing: { after: 120 },
@@ -482,16 +469,16 @@ export async function compileAndDownload(tender, tasks) {
   compiledSections.forEach((section, i) => {
     children.push(
       new Paragraph({
-        children: [new TextRun({ text: `${i + 1}. ${section.title}`, bold: true, size: headingSize, color: primaryColor, font: documentFont })],
+        children: [new TextRun({ text: `${i + 1}. ${section.title}`, bold: true, size: headingSize, color: primaryColor, font })],
         spacing: { before: 400, after: 100 },
         border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: primaryColor } },
       }),
       new Paragraph({
         children: [
-          new TextRun({ text: `Author: ${section.author}`, color: '94a3b8', size: bodySize - 4, font: documentFont }),
-          new TextRun({ text: `  |  Dept: ${section.department}`, color: '94a3b8', size: bodySize - 4, font: documentFont }),
+          new TextRun({ text: `Author: ${section.author}`, color: '94a3b8', size: bodySize - 4, font }),
+          new TextRun({ text: `  |  Dept: ${section.department}`, color: '94a3b8', size: bodySize - 4, font }),
           section.is_mandatory
-            ? new TextRun({ text: '  |  MANDATORY', color: 'dc2626', bold: true, size: bodySize - 4, font: documentFont })
+            ? new TextRun({ text: '  |  MANDATORY', color: 'dc2626', bold: true, size: bodySize - 4, font })
             : new TextRun(''),
         ],
         spacing: { after: 200 },
@@ -501,7 +488,7 @@ export async function compileAndDownload(tender, tasks) {
     const plainText = stripHtml(section.content);
     plainText.split('\n').filter(p => p.trim()).forEach(para => {
       children.push(new Paragraph({
-        children: [new TextRun({ text: para.trim(), size: bodySize, font: documentFont })],
+        children: [new TextRun({ text: para.trim(), size: bodySize, font })],
         spacing: { after: 160 },
       }));
     });
@@ -515,13 +502,13 @@ export async function compileAndDownload(tender, tasks) {
     new Paragraph({
       children: [new TextRun({
         text: `This document was compiled by TenderFlow Pro on ${new Date().toLocaleDateString()} by ${profile?.full_name || 'Unknown'}. Contains ${compiledSections.length} sections.`,
-        size: bodySize - 4, color: '94a3b8', font: documentFont,
+        size: bodySize - 4, color: '94a3b8', font,
       })],
       alignment: AlignmentType.CENTER,
       spacing: { before: 400, after: 200 },
     }),
     new Paragraph({
-      children: [new TextRun({ text: proposalFooter, size: bodySize - 4, color: '94a3b8', font: documentFont })],
+      children: [new TextRun({ text: proposalFooter, size: bodySize - 4, color: '94a3b8', font })],
       alignment: AlignmentType.CENTER,
     }),
   );
@@ -533,8 +520,8 @@ export async function compileAndDownload(tender, tasks) {
         default: new Header({
           children: [new Paragraph({
             children: [
-              new TextRun({ text: companyName, bold: true, size: bodySize - 4, color: primaryColor, font: documentFont }),
-              new TextRun({ text: `  |  ${tender.title}`, size: bodySize - 4, color: '94a3b8', font: documentFont }),
+              new TextRun({ text: companyName, bold: true, size: bodySize - 4, color: primaryColor, font }),
+              new TextRun({ text: `  |  ${tender.title}`, size: bodySize - 4, color: '94a3b8', font }),
             ],
             border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' } },
           })],
@@ -543,7 +530,7 @@ export async function compileAndDownload(tender, tasks) {
       footers: {
         default: new Footer({
           children: [new Paragraph({
-            children: [new TextRun({ text: `${companyName} — Confidential`, size: bodySize - 4, color: '94a3b8', font: documentFont })],
+            children: [new TextRun({ text: `${companyName} — Confidential`, size: bodySize - 4, color: '94a3b8', font })],
             alignment: AlignmentType.CENTER,
             border: { top: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' } },
           })],
