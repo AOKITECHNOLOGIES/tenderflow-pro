@@ -42,6 +42,12 @@ const routes = {
   '/admin/analytics':  { view: 'admin-analytics',   auth: true,  role: 'super_admin' },
   '/admin/settings':   { view: 'admin-settings',    auth: true,  role: 'super_admin' },
 
+  // Batch 3 — Knowledge Base, RFP Processor, Win/Loss, Integrations
+  '/knowledge-base':   { view: 'knowledge-base',  auth: true,  role: 'bid_manager' },
+  '/rfp-processor':    { view: 'rfp-processor',   auth: true,  role: 'bid_manager' },
+  '/win-loss':         { view: 'win-loss',         auth: true,  role: 'bid_manager' },
+  '/integrations':     { view: 'integrations',    auth: true,  role: 'bid_manager' },
+
   // Error
   '/unauthorized':     { view: 'unauthorized',      auth: false },
   '/404':              { view: '404',               auth: false },
@@ -200,6 +206,30 @@ export function getSidebarItems(role) {
       label: 'Reports',
       icon: 'bar-chart',
       path: '/reports',
+      roles: ['bid_manager', 'it_admin', 'super_admin'],
+    });
+    items.push({
+      label: 'Knowledge Base',
+      icon: 'book-open',
+      path: '/knowledge-base',
+      roles: ['bid_manager', 'it_admin', 'super_admin'],
+    });
+    items.push({
+      label: 'RFP Processor',
+      icon: 'file-text',
+      path: '/rfp-processor',
+      roles: ['bid_manager', 'it_admin', 'super_admin'],
+    });
+    items.push({
+      label: 'Win / Loss',
+      icon: 'bar-chart-2',
+      path: '/win-loss',
+      roles: ['bid_manager', 'it_admin', 'super_admin'],
+    });
+    items.push({
+      label: 'Integrations',
+      icon: 'link',
+      path: '/integrations',
       roles: ['bid_manager', 'it_admin', 'super_admin'],
     });
   }
