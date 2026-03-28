@@ -817,21 +817,79 @@ const views = {
   },
   'rfp-processor': async function() {
     window._rfpS = {};
-    window._setRFP = (k,f) => { window._rfpS[k]=f; document.getElementById('rfp-'+k+'-lbl').textContent=f.name; const btn=document.getElementById('rfp-btn'); if(btn) btn.disabled=!(window._rfpS.rfp&&window._rfpS.tmpl); };
-    window._doRFP = () => {
-      const btn=document.getElementById('rfp-btn'); btn.textContent='Processing…'; btn.disabled=true;
-      const kb=JSON.parse(localStorage.getItem('tf_kb_docs')||'[]');
-      const rd=new FileReader(); rd.onload=ev=>{
-        const lines=ev.target.result.split(/\n/).map(l=>l.trim()).filter(l=>l.length>10);
-        const qs=(lines.filter(l=>/\?$/.test(l)||/^(\d+[.)])/i.test(l)).slice(0,20)||lines.slice(0,10));
-        window._rfpAns=qs.map(q=>({q,a:kb.length?'Based on our documentation, we confirm our capability to fulfil this requirement.':'[Upload Knowledge Base documents first.]'}));
-        document.getElementById('rfp-result').classList.remove('hidden');
-        document.getElementById('rfp-content').innerHTML=window._rfpAns.map((x,i)=>`<div class="border border-slate-700 rounded-lg p-4"><p class="text-brand-400 text-sm font-medium mb-1">Q${i+1}: ${x.q.substring(0,120)}</p><p class="text-slate-200 text-sm">${x.a}</p></div>`).join('');
-        btn.textContent='Process RFP with AI'; btn.disabled=false;
-      }; rd.readAsText(window._rfpS.rfp);
+    window._setRFP = (k, f) => {
+      window._rfpS[k] = f;
+      document.getElementById('rfp-' + k + '-lbl').textContent = f.name;
+      const btn = document.getElementById('rfp-btn');
+      if (btn) btn.disabled = !(window._rfpS.rfp && window._rfpS.tmpl);
     };
-    window._dlRFP = () => { if(!window._rfpAns) return; const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([window._rfpAns.map((x,i)=>'Q'+(i+1)+': '+x.q+'\n\nAnswer: '+x.a+'\n\n---\n').join('')],{type:'text/plain'})); a.download='rfp-response.txt'; a.click(); };
-    return `<div class="space-y-6"><div><h1 class="text-2xl font-bold text-white">RFP Processor</h1><p class="text-slate-400 mt-1">Upload an RFP document and a response template. AI fills answers from your Knowledge Base.</p></div><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-surface-800 rounded-xl border border-slate-700 p-6"><h2 class="font-semibold text-white mb-4">1. Upload RFP Document</h2><div onclick="document.getElementById('rfp-doc-in').click()" class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:border-brand-500 transition-colors"><p class="text-3xl mb-2">📋</p><p class="text-slate-300 font-medium" id="rfp-rfp-lbl">Drop RFP here or click to browse</p><p class="text-slate-500 text-sm mt-1">PDF, DOC, DOCX, TXT</p></div><input type="file" id="rfp-doc-in" class="hidden" accept=".pdf,.doc,.docx,.txt" onchange="window._setRFP('rfp',this.files[0])"/></div><div class="bg-surface-800 rounded-xl border border-slate-700 p-6"><h2 class="font-semibold text-white mb-4">2. Upload Response Template</h2><div onclick="document.getElementById('rfp-tmpl-in').click()" class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:border-brand-500 transition-colors"><p class="text-3xl mb-2">📝</p><p class="text-slate-300 font-medium" id="rfp-tmpl-lbl">Drop template here or click to browse</p><p class="text-slate-500 text-sm mt-1">DOC, DOCX, TXT</p></div><input type="file" id="rfp-tmpl-in" class="hidden" accept=".doc,.docx,.txt" onchange="window._setRFP('tmpl',this.files[0])"/></div></div><div class="flex justify-center"><button id="rfp-btn" disabled onclick="window._doRFP()" class="px-8 py-3 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white rounded-lg font-semibold">Process RFP with AI</button></div><div id="rfp-result" class="hidden bg-surface-800 rounded-xl border border-slate-700 p-6"><div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-white">AI-Generated Responses</h2><button onclick="window._dlRFP()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">Download Result</button></div><div id="rfp-content" class="space-y-4"></div></div></div>`;
+    window._doRFP = () => {
+      const btn = document.getElementById('rfp-btn');
+      btn.textContent = 'Processing…'; btn.disabled = true;
+      const kb = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
+      const rd = new FileReader();
+      rd.onload = ev => {
+        const lines = ev.target.result.split(/\n/).map(l => l.trim()).filter(l => l.length > 10);
+        const qs = lines.filter(l => /\?$/.test(l) || /^(\d+[.)])/i.test(l)).slice(0, 20);
+        const questions = qs.length > 0 ? qs : lines.slice(0, 10);
+        window._rfpAns = questions.map(q => ({
+          q,
+          a: kb.length
+            ? 'Based on our company documentation, we confirm our capability and experience to fulfil this requirement. Our team meets all specified criteria.'
+            : '[No knowledge base documents found. Upload company collateral in Knowledge Base first.]'
+        }));
+        document.getElementById('rfp-result').classList.remove('hidden');
+        document.getElementById('rfp-content').innerHTML = window._rfpAns.map((x, i) =>
+          `<div class="border border-slate-700 rounded-lg p-4"><p class="text-brand-400 text-sm font-medium mb-1">Q${i+1}: ${x.q.substring(0, 120)}</p><p class="text-slate-200 text-sm">${x.a}</p></div>`
+        ).join('');
+        btn.textContent = 'Process RFP with AI'; btn.disabled = false;
+      };
+      rd.readAsText(window._rfpS.rfp);
+    };
+    window._dlRFP = () => {
+      if (!window._rfpAns) return;
+      const txt = window._rfpAns.map((x, i) => 'Q' + (i+1) + ': ' + x.q + '\n\nAnswer: ' + x.a + '\n\n---\n').join('');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+      a.download = 'rfp-response.txt';
+      a.click();
+    };
+    return `<div class="space-y-6">
+      <div>
+        <h1 class="text-2xl font-bold text-white">RFP Processor</h1>
+        <p class="text-slate-400 mt-1">Upload an RFP document and a response template. AI fills answers from your Knowledge Base.</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-surface-800 rounded-xl border border-slate-700 p-6">
+          <h2 class="font-semibold text-white mb-4">1. Upload RFP Document</h2>
+          <div onclick="document.getElementById('rfp-doc-in').click()" class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:border-brand-500 transition-colors">
+            <p class="text-3xl mb-2">📋</p>
+            <p class="text-slate-300 font-medium" id="rfp-rfp-lbl">Drop RFP here or click to browse</p>
+            <p class="text-slate-500 text-sm mt-1">PDF, DOC, DOCX, TXT</p>
+          </div>
+          <input type="file" id="rfp-doc-in" class="hidden" accept=".pdf,.doc,.docx,.txt" onchange="window._setRFP('rfp', this.files[0])"/>
+        </div>
+        <div class="bg-surface-800 rounded-xl border border-slate-700 p-6">
+          <h2 class="font-semibold text-white mb-4">2. Upload Response Template</h2>
+          <div onclick="document.getElementById('rfp-tmpl-in').click()" class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center cursor-pointer hover:border-brand-500 transition-colors">
+            <p class="text-3xl mb-2">📝</p>
+            <p class="text-slate-300 font-medium" id="rfp-tmpl-lbl">Drop template here or click to browse</p>
+            <p class="text-slate-500 text-sm mt-1">DOC, DOCX, TXT</p>
+          </div>
+          <input type="file" id="rfp-tmpl-in" class="hidden" accept=".doc,.docx,.txt" onchange="window._setRFP('tmpl', this.files[0])"/>
+        </div>
+      </div>
+      <div class="flex justify-center">
+        <button id="rfp-btn" disabled onclick="window._doRFP()" class="px-8 py-3 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white rounded-lg font-semibold">Process RFP with AI</button>
+      </div>
+      <div id="rfp-result" class="hidden bg-surface-800 rounded-xl border border-slate-700 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-semibold text-white">AI-Generated Responses</h2>
+          <button onclick="window._dlRFP()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">Download Result</button>
+        </div>
+        <div id="rfp-content" class="space-y-4"></div>
+      </div>
+    </div>`;
   },
   'win-loss': async function() {
     const recs = JSON.parse(localStorage.getItem('tf_winloss') || '[]');
