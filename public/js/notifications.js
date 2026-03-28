@@ -238,4 +238,4 @@ window._markAllNotificationsRead = () => {
   markAllRead();
 };
 
-console.log('[TenderFlow] Notifications module loaded');
+
