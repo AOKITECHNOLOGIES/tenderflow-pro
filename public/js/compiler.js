@@ -5,8 +5,9 @@
 import { supabase } from './supabase-client.js';
 import { getProfile } from './auth.js';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } from 'https://esm.sh/docx@8.5.0';
-
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Header, Footer, Table, TableRow, TableCell, WidthType, BorderStyle, ImageRun } from 'https://esm.sh/docx@8.5.0';
 const SECTION_ORDER = [
+  
   'executive_summary', 'company_profile', 'project_approach', 'methodology',
   'technical_proposal', 'timeline', 'project_plan', 'cv_key_personnel',
   'past_experience', 'references', 'quality_assurance', 'health_safety',
@@ -336,6 +337,23 @@ export async function compileAndDownload(tender, tasks) {
   const profile = getProfile();
   const companyName = tender.companies?.name || profile?.companies?.name || 'Company';
 
+  // Fetch company branding
+  const companyId = tender.company_id || profile?.company_id;
+  const { data: branding } = await supabase
+    .from('company_branding')
+    .select('*')
+    .eq('company_id', companyId)
+    .single();
+
+  const b = branding || {};
+  const primaryColor = (b.primary_color || '#0ea5e9').replace('#', '');
+  const secondaryColor = (b.secondary_color || '#0f172a').replace('#', '');
+  const accentColor = (b.accent_color || '#38bdf8').replace('#', '');
+  const logoUrl = b.logo_url || tender.companies?.logo_url || null;
+  const proposalHeader = b.proposal_header || '';
+  const proposalFooter = b.proposal_footer || `© ${new Date().getFullYear()} ${companyName}. Confidential.`;
+  const coverTemplate = b.cover_template || 'default';
+
   const sortedTasks = [...(tasks || [])].sort((a, b) => {
     const ai = SECTION_ORDER.indexOf(a.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(a.section_type);
     const bi = SECTION_ORDER.indexOf(b.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(b.section_type);
@@ -356,63 +374,114 @@ export async function compileAndDownload(tender, tasks) {
 
   const children = [];
 
-  // Cover page
+  // ── Cover page ──
+  // Logo (as URL reference in header — docx library handles this via image)
+  if (logoUrl) {
+    try {
+      const response = await fetch(logoUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      const contentType = response.headers.get('content-type') || 'image/png';
+      const ext = contentType.includes('png') ? 'png' : contentType.includes('svg') ? 'svg' : 'jpg';
+      const { ImageRun } = await import('https://esm.sh/docx@8.5.0');
+      children.push(new Paragraph({
+        children: [new ImageRun({
+          data: uint8,
+          transformation: { width: 150, height: 60 },
+          type: ext,
+        })],
+        alignment: AlignmentType.LEFT,
+        spacing: { before: 400, after: 400 },
+      }));
+    } catch (e) {
+      // Logo fetch failed — skip silently
+    }
+  }
+
+  // Cover title
   children.push(
     new Paragraph({
-      text: tender.title,
-      heading: HeadingLevel.TITLE,
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 2000, after: 400 },
+      children: [new TextRun({
+        text: tender.title,
+        bold: true,
+        size: 52,
+        color: secondaryColor,
+      })],
+      alignment: coverTemplate === 'minimal' ? AlignmentType.CENTER : AlignmentType.LEFT,
+      spacing: { before: 800, after: 300 },
     }),
     new Paragraph({
-      text: 'Tender Proposal',
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
+      children: [new TextRun({
+        text: 'Tender Proposal',
+        size: 28,
+        color: primaryColor,
+      })],
+      alignment: coverTemplate === 'minimal' ? AlignmentType.CENTER : AlignmentType.LEFT,
+      spacing: { after: 600 },
     }),
   );
 
-  if (tender.reference_number) {
-    children.push(new Paragraph({
-      text: `Reference: ${tender.reference_number}`,
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-    }));
-  }
-  if (tender.issuing_authority) {
-    children.push(new Paragraph({
-      text: `Issued by: ${tender.issuing_authority}`,
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-    }));
-  }
-  children.push(
-    new Paragraph({
-      text: `Submitted by: ${companyName}`,
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-    }),
-    new Paragraph({
-      text: `Date: ${new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}`,
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-    }),
-  );
+  // Cover metadata table (like Image 1)
+  const { Table, TableRow, TableCell, WidthType, BorderStyle } = await import('https://esm.sh/docx@8.5.0');
 
-  if (tender.deadline) {
+  const metaRows = [
+    ['Document name', tender.title || '—'],
+    ['Reference', tender.reference_number || '—'],
+    ['Issued by', tender.issuing_authority || '—'],
+    ['Submitted by', companyName],
+    ['Date', new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })],
+    ['Deadline', tender.deadline ? new Date(tender.deadline).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'],
+    ['Account Manager', tender.account_manager || '—'],
+    ['Classification', 'Confidential'],
+  ].filter(([, val]) => val && val !== '—' || ['Document name', 'Submitted by', 'Date', 'Classification'].includes(_));
+
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+  const cellBorder = { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' };
+
+  children.push(new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      ['Document name', tender.title || '—'],
+      ['Reference', tender.reference_number || '—'],
+      ['Issued by', tender.issuing_authority || '—'],
+      ['Submitted by', companyName],
+      ['Date', new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })],
+      tender.deadline ? ['Deadline', new Date(tender.deadline).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })] : null,
+      tender.account_manager ? ['Account Manager', tender.account_manager] : null,
+      ['Classification', 'Confidential'],
+    ].filter(Boolean).map(([label, value]) => new TableRow({
+      children: [
+        new TableCell({
+          width: { size: 30, type: WidthType.PERCENTAGE },
+          borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
+          children: [new Paragraph({
+            children: [new TextRun({ text: label, bold: true, size: 20, color: '64748b' })],
+          })],
+        }),
+        new TableCell({
+          width: { size: 70, type: WidthType.PERCENTAGE },
+          borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
+          children: [new Paragraph({
+            children: [new TextRun({ text: value, size: 20 })],
+          })],
+        }),
+      ],
+    })),
+  }));
+
+  if (proposalHeader) {
     children.push(new Paragraph({
-      text: `Deadline: ${new Date(tender.deadline).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}`,
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
+      children: [new TextRun({ text: proposalHeader, size: 18, color: '94a3b8', italics: true })],
+      spacing: { before: 400 },
     }));
   }
 
   // Page break before TOC
   children.push(new Paragraph({ children: [new PageBreak()] }));
 
-  // Table of Contents
+  // ── Table of Contents ──
   children.push(new Paragraph({
-    text: 'Table of Contents',
-    heading: HeadingLevel.HEADING_1,
+    children: [new TextRun({ text: 'Table of Contents', bold: true, size: 32, color: primaryColor })],
     spacing: { before: 400, after: 300 },
   }));
 
@@ -420,7 +489,9 @@ export async function compileAndDownload(tender, tasks) {
     children.push(new Paragraph({
       children: [
         new TextRun({ text: `${i + 1}. ${section.title}`, size: 22 }),
-        new TextRun({ text: section.is_mandatory ? '  [MANDATORY]' : '', color: 'dc2626', size: 20 }),
+        section.is_mandatory
+          ? new TextRun({ text: '  [MANDATORY]', color: 'dc2626', size: 20, bold: true })
+          : new TextRun(''),
       ],
       spacing: { after: 120 },
     }));
@@ -429,13 +500,21 @@ export async function compileAndDownload(tender, tasks) {
   // Page break before sections
   children.push(new Paragraph({ children: [new PageBreak()] }));
 
-  // Sections
+  // ── Sections ──
   compiledSections.forEach((section, i) => {
+    // Section heading with primary colour underline effect
     children.push(
       new Paragraph({
-        text: `${i + 1}. ${section.title}`,
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 400, after: 200 },
+        children: [new TextRun({
+          text: `${i + 1}. ${section.title}`,
+          bold: true,
+          size: 28,
+          color: primaryColor,
+        })],
+        spacing: { before: 400, after: 100 },
+        border: {
+          bottom: { style: BorderStyle.SINGLE, size: 2, color: primaryColor },
+        },
       }),
       new Paragraph({
         children: [
@@ -453,7 +532,7 @@ export async function compileAndDownload(tender, tasks) {
     const paragraphs = plainText.split('\n').filter(p => p.trim());
     paragraphs.forEach(para => {
       children.push(new Paragraph({
-        text: para.trim(),
+        children: [new TextRun({ text: para.trim(), size: 22 })],
         spacing: { after: 160 },
       }));
     });
@@ -461,22 +540,51 @@ export async function compileAndDownload(tender, tasks) {
     children.push(new Paragraph({ spacing: { after: 300 } }));
   });
 
-  // Footer
+  // ── Footer page ──
   children.push(
     new Paragraph({ children: [new PageBreak()] }),
     new Paragraph({
-      text: `This document was compiled by TenderFlow Pro on ${new Date().toLocaleDateString()} by ${profile?.full_name || 'Unknown'}. Contains ${compiledSections.length} sections.`,
+      children: [new TextRun({
+        text: `This document was compiled by TenderFlow Pro on ${new Date().toLocaleDateString()} by ${profile?.full_name || 'Unknown'}. Contains ${compiledSections.length} sections.`,
+        size: 18,
+        color: '94a3b8',
+      })],
       alignment: AlignmentType.CENTER,
-      spacing: { before: 400 },
+      spacing: { before: 400, after: 200 },
     }),
     new Paragraph({
-      text: `© ${new Date().getFullYear()} ${companyName}. Confidential.`,
+      children: [new TextRun({ text: proposalFooter, size: 18, color: '94a3b8' })],
       alignment: AlignmentType.CENTER,
     }),
   );
 
   const doc = new Document({
-    sections: [{ children }],
+    sections: [{
+      properties: {},
+      headers: {
+        default: new Header({
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: companyName, bold: true, size: 18, color: primaryColor }),
+              new TextRun({ text: `  |  ${tender.title}`, size: 18, color: '94a3b8' }),
+            ],
+            border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' } },
+          })],
+        }),
+      },
+      footers: {
+        default: new Footer({
+          children: [new Paragraph({
+            children: [
+              new TextRun({ text: `${companyName} — Confidential`, size: 16, color: '94a3b8' }),
+            ],
+            alignment: AlignmentType.CENTER,
+            border: { top: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' } },
+          })],
+        }),
+      },
+      children,
+    }],
     title: tender.title,
     subject: 'Tender Proposal',
     creator: profile?.full_name || 'TenderFlow Pro',
