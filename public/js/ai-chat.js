@@ -195,45 +195,35 @@ function loadKnowledgeBase() {
     if (!docs.length) return null;
 
     const previews = docs.map(d => {
-      let textPreview = '';
       const category = d.category === 'tender' ? 'Past Tender' : 'Company Document';
 
-      if (d.content && typeof d.content === 'string') {
+      // Prefer extractedText stored at upload time (PDF/DOCX/TXT all populate this)
+      let textPreview = '';
+      if (d.extractedText && d.extractedText.length > 20) {
+        // Send up to 8000 chars per doc — enough for meaningful content
+        textPreview = d.extractedText.substring(0, 8000);
+        if (d.extractedText.length > 8000) {
+          textPreview += `\n\n[... ${Math.round((d.extractedText.length - 8000) / 5).toLocaleString()} more words not shown]`;
+        }
+      } else if (d.extractionNote) {
+        textPreview = `[Could not extract text: ${d.extractionNote}]`;
+      } else {
+        // Legacy docs uploaded before extraction was added — try base64 decode for text files
         try {
-          if (d.content.startsWith('data:')) {
-            const commaIdx = d.content.indexOf(',');
-            if (commaIdx !== -1) {
-              const header = d.content.substring(0, commaIdx);
-              const base64Data = d.content.substring(commaIdx + 1);
-
-              // Only decode text-based files — PDF binary won't be readable
-              if (header.includes('text/') || header.includes('application/json') || d.name.endsWith('.txt') || d.name.endsWith('.md')) {
-                try {
-                  const decoded = atob(base64Data);
-                  textPreview = decoded
-                    .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
-                    .replace(/\s{3,}/g, '  ')
-                    .trim()
-                    .substring(0, 2000);
-                } catch (_) {}
-              } else if (d.name.endsWith('.pdf') || d.name.endsWith('.docx') || d.name.endsWith('.doc')) {
-                textPreview = '[Binary file — upload a .txt or .md version for AI content access]';
-              }
+          if (d.content && d.content.startsWith('data:text')) {
+            const base64 = d.content.split(',')[1];
+            if (base64) {
+              textPreview = atob(base64).substring(0, 4000).replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
             }
-          } else {
-            // Plain text content stored directly
-            textPreview = d.content.substring(0, 2000).replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
           }
         } catch (_) {}
+        if (!textPreview) textPreview = '[No text content — re-upload this file to enable AI reading]';
       }
 
+      const wordCount = d.extractedText ? Math.round(d.extractedText.split(/\s+/).length).toLocaleString() : null;
       let entry = `[${category}] ${d.name}`;
-      if (d.size) entry += ` (${(d.size / 1024).toFixed(1)} KB)`;
-      if (textPreview && textPreview.length > 20) {
-        entry += `\nContent preview:\n${textPreview}`;
-      } else if (!textPreview) {
-        entry += '\n(No text preview available — file may be binary)';
-      }
+      if (d.size) entry += ` (${(d.size / 1024).toFixed(1)} KB${wordCount ? `, ~${wordCount} words` : ''})`;
+      entry += `\nContent:\n${textPreview}`;
       return entry;
     }).join('\n\n---\n\n');
 
