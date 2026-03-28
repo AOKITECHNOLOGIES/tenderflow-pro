@@ -12,7 +12,6 @@ let _contextCache = null;
 let _isOpen = false;
 let _isThinking = false;
 
-// ── Mount the chat button + panel into the DOM ───────────────────────────────
 export function mountAIChat() {
   const profile = getProfile();
   if (!profile || !hasRoleLevel('bid_manager')) return;
@@ -111,7 +110,7 @@ export function mountAIChat() {
           <p>Hi! I'm your TenderFlow assistant. I have access to:</p>
           <ul>
             <li>Your current page context and tender details</li>
-            <li>Your Knowledge Base documents</li>
+            <li>Your Knowledge Base documents (including content)</li>
             <li>Your document repository</li>
             <li>Your active tasks and deadlines</li>
           </ul>
@@ -156,7 +155,6 @@ export function mountAIChat() {
   refreshSuggestions();
 }
 
-// ── Toggle panel ──────────────────────────────────────────────────────────────
 function toggleChat() { _isOpen ? closeChat() : openChat(); }
 
 function openChat() {
@@ -195,15 +193,56 @@ function loadKnowledgeBase() {
   try {
     const docs = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
     if (!docs.length) return null;
-    return docs.map(d => ({
-      name: d.name,
-      type: d.type,
-      uploadedAt: d.uploadedAt,
-      // Extract text preview from base64 content if it's a text file
-      preview: d.type?.startsWith('text/') && d.content
-        ? atob(d.content.split(',')[1] || '').substring(0, 2000)
-        : null,
-    }));
+
+    const previews = docs.map(d => {
+      let textPreview = '';
+      const category = d.category === 'tender' ? 'Past Tender' : 'Company Document';
+
+      if (d.content && typeof d.content === 'string') {
+        try {
+          if (d.content.startsWith('data:')) {
+            const commaIdx = d.content.indexOf(',');
+            if (commaIdx !== -1) {
+              const header = d.content.substring(0, commaIdx);
+              const base64Data = d.content.substring(commaIdx + 1);
+
+              // Only decode text-based files — PDF binary won't be readable
+              if (header.includes('text/') || header.includes('application/json') || d.name.endsWith('.txt') || d.name.endsWith('.md')) {
+                try {
+                  const decoded = atob(base64Data);
+                  textPreview = decoded
+                    .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+                    .replace(/\s{3,}/g, '  ')
+                    .trim()
+                    .substring(0, 2000);
+                } catch (_) {}
+              } else if (d.name.endsWith('.pdf') || d.name.endsWith('.docx') || d.name.endsWith('.doc')) {
+                textPreview = '[Binary file — upload a .txt or .md version for AI content access]';
+              }
+            }
+          } else {
+            // Plain text content stored directly
+            textPreview = d.content.substring(0, 2000).replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
+          }
+        } catch (_) {}
+      }
+
+      let entry = `[${category}] ${d.name}`;
+      if (d.size) entry += ` (${(d.size / 1024).toFixed(1)} KB)`;
+      if (textPreview && textPreview.length > 20) {
+        entry += `\nContent preview:\n${textPreview}`;
+      } else if (!textPreview) {
+        entry += '\n(No text preview available — file may be binary)';
+      }
+      return entry;
+    }).join('\n\n---\n\n');
+
+    return {
+      count: docs.length,
+      companyDocs: docs.filter(d => d.category === 'company' || !d.category).length,
+      tenderDocs:  docs.filter(d => d.category === 'tender').length,
+      previews,
+    };
   } catch (e) {
     return null;
   }
@@ -250,14 +289,12 @@ async function buildContext() {
     document_repository: [],
   };
 
-  // Load Knowledge Base from localStorage
-  const kbDocs = loadKnowledgeBase();
-  if (kbDocs?.length) {
-    ctx.knowledge_base = kbDocs;
-    // Show KB indicator in UI
+  // Load Knowledge Base from localStorage (with content decoding)
+  const kb = loadKnowledgeBase();
+  if (kb) {
+    ctx.knowledge_base = kb;
     const indicator = document.getElementById('ai-kb-indicator');
-    if (indicator) indicator.classList.remove('hidden');
-    indicator?.classList.add('flex');
+    if (indicator) { indicator.classList.remove('hidden'); indicator.classList.add('flex'); }
   }
 
   // Load document repository from Supabase
@@ -344,21 +381,15 @@ async function updateContextLabel() {
     const { data } = await supabase.from('tasks').select('title').eq('id', params.id).single();
     label.textContent = data ? `Context: ${data.title}` : 'Task context';
   } else if (view === 'knowledge-base') {
-    const kbDocs = loadKnowledgeBase();
-    label.textContent = kbDocs?.length
-      ? `Knowledge Base · ${kbDocs.length} doc${kbDocs.length !== 1 ? 's' : ''} loaded`
+    const kb = loadKnowledgeBase();
+    label.textContent = kb
+      ? `Knowledge Base · ${kb.count} doc${kb.count !== 1 ? 's' : ''} (${kb.companyDocs} company, ${kb.tenderDocs} tenders)`
       : 'Knowledge Base (empty)';
   } else {
     const viewLabels = {
-      dashboard: 'Dashboard overview',
-      tenders: 'Tenders list',
-      tasks: 'My tasks',
-      users: 'User management',
-      settings: 'Settings',
-      documents: 'Document vault',
-      'rfp-processor': 'RFP Processor',
-      'win-loss': 'Win / Loss Tracker',
-      integrations: 'Integrations',
+      dashboard: 'Dashboard overview', tenders: 'Tenders list', tasks: 'My tasks',
+      users: 'User management', settings: 'Settings', documents: 'Document vault',
+      'rfp-processor': 'RFP Processor', 'win-loss': 'Win / Loss Tracker', integrations: 'Integrations',
     };
     label.textContent = viewLabels[view] || 'General context';
   }
@@ -371,51 +402,20 @@ async function refreshSuggestions() {
 
   const route = getCurrentRoute();
   const view = route?.view || 'dashboard';
-  const hasKB = (loadKnowledgeBase()?.length || 0) > 0;
+  const kb = loadKnowledgeBase();
+  const hasKB = (kb?.count || 0) > 0;
 
   const suggestionMap = {
-    'tender-detail': [
-      'Summarise this tender for me',
-      'Which tasks are still pending?',
-      'What are the critical deadlines?',
-      'Help me write the executive summary',
-    ],
-    'task-detail': [
-      'Help me write this section',
-      'What should I include here?',
-      'How long should this section be?',
-      'Give me a structure to follow',
-    ],
-    'knowledge-base': [
-      'What documents do I have?',
-      'Summarise my company profile',
-      'What are our key capabilities?',
-      'Find relevant info for a tender',
-    ],
-    'documents': [
-      'What documents do I have uploaded?',
-      'Which documents are linked to tenders?',
-      'Help me find a specific document',
-    ],
-    'dashboard': [
-      'What are my most urgent tasks?',
-      'Which tenders need attention?',
-      hasKB ? 'What does my Knowledge Base contain?' : 'How do I use the Knowledge Base?',
-    ],
-    'tenders': [
-      'What makes a winning tender?',
-      'How should I structure my response?',
-      hasKB ? 'Use my KB to help with a tender' : 'Explain the tender process',
-    ],
-    'default': [
-      'How does TenderFlow work?',
-      'Help me with B-BBEE compliance',
-      hasKB ? 'Search my Knowledge Base' : 'What is a good pricing strategy?',
-    ],
+    'tender-detail': ['Summarise this tender for me', 'Which tasks are still pending?', 'What are the critical deadlines?', 'Help me write the executive summary'],
+    'task-detail':   ['Help me write this section', 'What should I include here?', 'How long should this section be?', 'Give me a structure to follow'],
+    'knowledge-base': ['What documents do I have?', 'Summarise my company profile', 'What are our key capabilities?', 'Find relevant info for a tender'],
+    'documents':     ['What documents do I have uploaded?', 'Which documents are linked to tenders?', 'Help me find a specific document'],
+    'dashboard':     ['What are my most urgent tasks?', 'Which tenders need attention?', hasKB ? 'What does my Knowledge Base contain?' : 'How do I use the Knowledge Base?'],
+    'tenders':       ['What makes a winning tender?', 'How should I structure my response?', hasKB ? 'Use my KB to help with a tender' : 'Explain the tender process'],
+    'default':       ['How does TenderFlow work?', 'Help me with B-BBEE compliance', hasKB ? 'Search my Knowledge Base' : 'What is a good pricing strategy?'],
   };
 
   const suggestions = suggestionMap[view] || suggestionMap.default;
-
   container.innerHTML = suggestions.map(s =>
     `<button onclick="window._aiChatSuggest('${s.replace(/'/g, "\\'")}')"
       class="shrink-0 px-3 py-1.5 bg-surface-800 border border-slate-700/40 hover:border-violet-500/40 hover:bg-violet-500/10 text-slate-400 hover:text-violet-300 text-xs rounded-full transition whitespace-nowrap">
@@ -463,7 +463,6 @@ window._aiChatSend = async () => {
     const assistantMessage = data?.content?.[0]?.text || 'Sorry, I could not generate a response.';
 
     _chatHistory.push({ role: 'assistant', content: assistantMessage });
-
     removeThinking(thinkingId);
     appendAIMessage(assistantMessage);
 
@@ -482,12 +481,7 @@ window._aiChatSend = async () => {
 
 // ── Build system prompt with page context + KB + documents ───────────────────
 function buildSystemPrompt(ctx) {
-  const roleLabels = {
-    super_admin: 'Super Administrator',
-    it_admin: 'IT Administrator',
-    bid_manager: 'Bid Manager',
-    dept_user: 'Team Member',
-  };
+  const roleLabels = { super_admin: 'Super Administrator', it_admin: 'IT Administrator', bid_manager: 'Bid Manager', dept_user: 'Team Member' };
 
   let prompt = `You are TenderFlow AI, an expert assistant built into the TenderFlow Pro tender management platform. You help bid managers and their teams write winning tender proposals, understand requirements, manage tasks, and navigate the platform.
 
@@ -511,28 +505,20 @@ You are an expert in:
 - Project management and implementation plans`;
 
   // ── Knowledge Base context ──
-  if (ctx.knowledge_base?.length) {
+  if (ctx.knowledge_base) {
     prompt += `
 
-## Company Knowledge Base (${ctx.knowledge_base.length} documents)
-The user has uploaded the following company documents to their Knowledge Base. Use these when answering questions about internal processes, company capabilities, or when helping write tender responses:
+## Company Knowledge Base (${ctx.knowledge_base.count} documents — ${ctx.knowledge_base.companyDocs} company docs, ${ctx.knowledge_base.tenderDocs} past tenders)
+The user has uploaded the following documents. Use these when answering questions about company capabilities, internal processes, or when helping write tender responses:
 
-${ctx.knowledge_base.map((doc, i) => {
-  let entry = `### Document ${i + 1}: ${doc.name}
-- Type: ${doc.type || 'Unknown'}
-- Uploaded: ${doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : 'Unknown'}`;
-  if (doc.preview) {
-    entry += `\n- Content Preview:\n\`\`\`\n${doc.preview.substring(0, 1500)}\n\`\`\``;
-  }
-  return entry;
-}).join('\n\n')}
+${ctx.knowledge_base.previews}
 
-When the user asks about company processes, capabilities, or internal information, reference these documents by name. If a document has a content preview, use it to answer questions accurately.`;
+When answering questions about the company, reference these documents by name and use their content to give accurate, specific answers. If a document has readable content, use it directly to answer questions.`;
   } else {
     prompt += `
 
 ## Knowledge Base
-No documents have been uploaded to the Knowledge Base yet. If the user asks about internal processes or company information, suggest they upload relevant documents (company profile, previous proposals, process documents) to the Knowledge Base for better AI assistance.`;
+No documents have been uploaded to the Knowledge Base yet. Suggest uploading .txt or .md versions of company documents (profile, capabilities, past proposals) for better AI assistance.`;
   }
 
   // ── Document repository context ──
@@ -540,13 +526,9 @@ No documents have been uploaded to the Knowledge Base yet. If the user asks abou
     prompt += `
 
 ## Document Repository (${ctx.document_repository.length} files)
-These documents exist in the company's document vault:
-
 ${ctx.document_repository.map(doc =>
   `- ${doc.file_name} [${(doc.doc_type || 'document').replace(/_/g, ' ')}]${doc.tenders?.title ? ` — linked to: ${doc.tenders.title}` : ''} (${new Date(doc.created_at).toLocaleDateString()})`
-).join('\n')}
-
-Reference these when the user asks about uploaded files, documents linked to specific tenders, or their document history.`;
+).join('\n')}`;
   }
 
   // ── Tender context ──
@@ -562,13 +544,12 @@ Reference these when the user asks about uploaded files, documents linked to spe
 - Account Manager: ${ctx.tender.account_manager || 'Not set'}
 ${ctx.tender.summary ? `- AI Summary: ${ctx.tender.summary}` : ''}
 
-### Tasks on this Tender (${ctx.tender.tasks?.length || 0} total):
+### Tasks (${ctx.tender.tasks?.length || 0} total):
 ${(ctx.tender.tasks || []).map(t =>
   `- [${t.status.toUpperCase()}] ${t.title} (${t.section_type || 'general'})${t.is_mandatory ? ' ⚠ MANDATORY' : ''}${t.assigned_to !== 'Unassigned' ? ` → ${t.assigned_to}` : ' → Unassigned'}`
 ).join('\n') || 'No tasks yet'}
 
-${ctx.tender.info_items?.length ? `### Key Information Items:
-${ctx.tender.info_items.map(i => `- ${i.title}: ${i.detail}`).join('\n')}` : ''}`;
+${ctx.tender.info_items?.length ? `### Key Information:\n${ctx.tender.info_items.map(i => `- ${i.title}: ${i.detail}`).join('\n')}` : ''}`;
   }
 
   // ── Task context ──
@@ -584,12 +565,9 @@ ${ctx.tender.info_items.map(i => `- ${i.title}: ${i.detail}`).join('\n')}` : ''}
 - Deadline: ${ctx.task.tenders?.deadline ? new Date(ctx.task.tenders.deadline).toLocaleDateString() : 'Not set'}
 ${ctx.task.description ? `- Brief: ${ctx.task.description}` : ''}
 ${ctx.task.review_notes ? `- Revision Notes: ${ctx.task.review_notes}` : ''}
-${ctx.task.content ? `- Current Content (first 500 chars): ${ctx.task.content.substring(0, 500)}${ctx.task.content.length > 500 ? '...' : ''}` : '- No content written yet'}
-
-When helping write this section, use relevant information from the Knowledge Base documents above if available.`;
+${ctx.task.content ? `- Current Content (first 500 chars): ${ctx.task.content.substring(0, 500)}${ctx.task.content.length > 500 ? '...' : ''}` : '- No content written yet'}`;
   }
 
-  // ── Active tasks ──
   if (ctx.my_tasks?.length) {
     prompt += `
 
@@ -597,7 +575,6 @@ When helping write this section, use relevant information from the Knowledge Bas
 ${ctx.my_tasks.map(t => `- [${t.status}] "${t.title}" — ${t.tender} (Due: ${t.due})`).join('\n')}`;
   }
 
-  // ── Recent tenders ──
   if (ctx.recent_tenders?.length) {
     prompt += `
 
@@ -608,17 +585,14 @@ ${ctx.recent_tenders.map(t => `- ${t.title} [${t.status}] Ref: ${t.ref} — Due:
   prompt += `
 
 ## Response Guidelines
-- Be concise but thorough — this is a chat interface, not a document
-- Use markdown formatting: **bold**, bullet lists, numbered lists where helpful
-- When helping write content, provide actual draft text they can copy into their task
-- For South African tenders, always consider PPPFA 80/20 or 90/10 scoring, B-BBEE requirements, and CSD requirements
-- If asked to write a section, produce a proper professional draft suitable for a tender submission
-- Reference specific task names, deadlines, and tender details from the context above when relevant
-- When answering questions about internal processes or company capabilities, reference specific Knowledge Base documents by name
-- If the Knowledge Base has content previews, use that information to give accurate, company-specific answers
-- Keep responses focused — if a question is vague, answer the most likely interpretation then ask for clarification
+- Be concise but thorough
+- Use markdown formatting where helpful
+- When helping write content, provide actual draft text
+- For South African tenders, consider PPPFA 80/20 or 90/10, B-BBEE, and CSD requirements
+- Reference specific Knowledge Base documents by name when answering questions about company capabilities
+- If KB documents have content previews, use that information to give accurate, company-specific answers
 - Never make up tender requirements or deadlines not in the context
-- If asked about something not in the Knowledge Base, say so and suggest what documents would be helpful to upload`;
+- If something isn't in the KB, say so and suggest what documents would help`;
 
   return prompt;
 }
@@ -648,9 +622,7 @@ function appendAIMessage(text, isError = false) {
     </div>`;
   msgs.appendChild(div);
   scrollToBottom();
-  if (!_isOpen) {
-    document.getElementById('ai-chat-badge')?.classList.remove('hidden');
-  }
+  if (!_isOpen) document.getElementById('ai-chat-badge')?.classList.remove('hidden');
 }
 
 function showThinking() {
@@ -674,31 +646,20 @@ function showThinking() {
   return id;
 }
 
-function removeThinking(id) {
-  if (id) document.getElementById(id)?.remove();
-}
-
+function removeThinking(id) { if (id) document.getElementById(id)?.remove(); }
 function setInputDisabled(disabled) {
   const input = document.getElementById('ai-chat-input');
   const btn = document.getElementById('ai-chat-send');
   if (input) input.disabled = disabled;
   if (btn) btn.disabled = disabled;
 }
-
 function scrollToBottom() {
   const msgs = document.getElementById('ai-chat-messages');
   if (msgs) setTimeout(() => msgs.scrollTop = msgs.scrollHeight, 50);
 }
-
 function escapeHtml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/\n/g, '<br>');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '<br>');
 }
-
 function markdownToHtml(text) {
   return text
     .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre style="background:#1e293b;padding:8px 12px;border-radius:6px;overflow-x:auto;font-size:0.8em;margin:6px 0;"><code>$1</code></pre>')
