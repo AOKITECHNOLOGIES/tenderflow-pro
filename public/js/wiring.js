@@ -242,13 +242,17 @@ function attachTaskDetailHandlers() {
   const { id } = getRouteParams();
   if (!id) return;
 
+  // Guard against double-init — check if already wired for this task
+  if (document.getElementById('quill-editor')?._wiringDone === id) return;
+  const editorEl = document.getElementById('quill-editor');
+  if (editorEl) editorEl._wiringDone = id;
+
   // Load all dynamic panels
   window._loadTaskDocuments(id);
   window._loadTaskAssignFields && window._loadTaskAssignFields(id);
   window._loadTaskImages(id);
 
   // Initialize Quill editor if present
-  const editorEl = document.getElementById('quill-editor');
   if (editorEl && window.Quill) {
     if (window._quillEditor) {
       try { window._quillEditor = null; } catch (_) {}
