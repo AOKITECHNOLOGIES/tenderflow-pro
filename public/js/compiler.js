@@ -13,6 +13,13 @@ const SECTION_ORDER = [
   'bbbee_certificate', 'tax_clearance', 'compliance', 'insurance', 'terms_conditions',
 ];
 
+// ── Text truncation helper ───────────────────────────────────────────────────
+function truncateForAI(text, maxChars = 20000) {
+  if (!text || text.length <= maxChars) return text;
+  return text.substring(0, maxChars) + '\n\n[Document truncated for processing — ' +
+    Math.round((text.length / maxChars) * 100) + '% of original length sent]';
+}
+
 // ── Compile Tender ───────────────────────────────────────────────────────────
 export async function compileTender(tenderId) {
   const profile = getProfile();
@@ -199,16 +206,16 @@ function generateCompiledHTML({ tender, companyName, logoUrl, sections, generate
 // ── RFQ AI Analysis ──────────────────────────────────────────────────────────
 export async function triggerRFQAnalysis(tenderId, fileText) {
   const { data: { session } } = await supabase.auth.getSession();
-if (!session) throw new Error('Not authenticated');
+  if (!session) throw new Error('Not authenticated');
+
+  const truncatedText = truncateForAI(fileText);
 
   const response = await supabase.functions.invoke('parse-rfq', {
-    body: { tender_id: tenderId, document_text: fileText },
+    body: { tender_id: tenderId, document_text: truncatedText },
     headers: {
       Authorization: `Bearer ${session.access_token}`,
     },
   });
-
-  console.log('[AI] Response:', JSON.stringify(response));
 
   if (response.error) throw new Error(response.error.message || 'AI analysis failed');
   if (!response.data || !response.data.success) throw new Error(response.data?.error || 'AI analysis returned no data');
@@ -272,13 +279,16 @@ export function downloadHTML(htmlContent, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
 // ── Document Section Parser ──────────────────────────────────────────────────
 export async function triggerDocumentParse(tenderId, fileText, replaceExisting) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
 
+  const truncatedText = truncateForAI(fileText);
+
   const response = await supabase.functions.invoke('parse-document', {
-    body: { tender_id: tenderId, document_text: fileText, replace_existing: replaceExisting },
+    body: { tender_id: tenderId, document_text: truncatedText, replace_existing: replaceExisting },
     headers: { Authorization: `Bearer ${session.access_token}` },
   });
 
@@ -289,44 +299,36 @@ export async function triggerDocumentParse(tenderId, fileText, replaceExisting) 
 
 // ── compileAndDownload: used by wiring.js compile handler ───────────────────
 export async function compileAndDownload(tender, tasks) {
-    const SECTION_ORDER = [
-          'executive_summary', 'company_profile', 'project_approach', 'methodology',
-          'technical_proposal', 'timeline', 'project_plan', 'cv_key_personnel',
-          'past_experience', 'references', 'quality_assurance', 'health_safety',
-          'environmental', 'risk_management', 'pricing', 'financial_proposal',
-          'bbbee_certificate', 'tax_clearance', 'compliance', 'insurance', 'terms_conditions',
-        ];
-
   const profile = getProfile();
-    const companyName = tender.companies?.name || profile?.companies?.name || 'Company';
+  const companyName = tender.companies?.name || profile?.companies?.name || 'Company';
 
   const sortedTasks = [...(tasks || [])].sort((a, b) => {
-        const ai = SECTION_ORDER.indexOf(a.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(a.section_type);
-        const bi = SECTION_ORDER.indexOf(b.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(b.section_type);
-        return ai - bi;
+    const ai = SECTION_ORDER.indexOf(a.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(a.section_type);
+    const bi = SECTION_ORDER.indexOf(b.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(b.section_type);
+    return ai - bi;
   });
 
   const compiledSections = sortedTasks
-      .filter(t => t.status === 'approved' || t.content)
-      .map(t => ({
-              title: t.title,
-              section_type: t.section_type,
-              content: t.content || '[No content provided]',
-              author: t.profiles?.full_name || 'Unknown',
-              department: t.profiles?.department || 'General',
-              status: t.status,
-              is_mandatory: t.is_mandatory,
-      }));
+    .filter(t => t.status === 'approved' || t.content)
+    .map(t => ({
+      title: t.title,
+      section_type: t.section_type,
+      content: t.content || '[No content provided]',
+      author: t.profiles?.full_name || 'Unknown',
+      department: t.profiles?.department || 'General',
+      status: t.status,
+      is_mandatory: t.is_mandatory,
+    }));
 
   const htmlDocument = generateCompiledHTML({
-        tender,
-        companyName,
-        logoUrl: tender.companies?.logo_url || null,
-        sections: compiledSections,
-        generatedAt: new Date().toISOString(),
-        generatedBy: profile?.full_name || 'Unknown',
+    tender,
+    companyName,
+    logoUrl: tender.companies?.logo_url || null,
+    sections: compiledSections,
+    generatedAt: new Date().toISOString(),
+    generatedBy: profile?.full_name || 'Unknown',
   });
 
   const filename = (tender.title || 'tender').replace(/[^a-z0-9]/gi, '-').toLowerCase() + '-proposal.html';
-    downloadHTML(htmlDocument, filename);
+  downloadHTML(htmlDocument, filename);
 }
