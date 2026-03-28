@@ -575,18 +575,6 @@ const views = {
       </div>
     </div>`;
 
-    // Auto-load dynamic sections after the HTML is in the DOM
-    setTimeout(() => {
-      if (hasRoleLevel('bid_manager') && !isLocked) {
-        window._loadTaskAssignFields && window._loadTaskAssignFields(id);
-      }
-      // These are defined in wiring.js — call them if available, otherwise
-      // wiring.js's attachTaskDetailHandlers will call them via attachDynamicHandlers
-      window._loadTaskImages && window._loadTaskImages(id);
-      // loadTaskDocuments is a local fn in wiring.js — expose it if not yet done
-      window._loadTaskDocuments && window._loadTaskDocuments(id);
-    }, 100);
-
     return html;
   },
 
@@ -1265,6 +1253,20 @@ async function loadCompaniesForScope() {
   }
 }
 
+// ── Fire dynamic loaders after any view renders ──────────────────────────────
+function _fireDynamicLoaders(route) {
+  if (route.view === 'task-detail') {
+    const { id } = getRouteParams();
+    if (!id) return;
+    // Small delay to ensure DOM is painted before querying elements
+    setTimeout(() => {
+      window._loadTaskAssignFields && window._loadTaskAssignFields(id);
+      window._loadTaskDocuments   && window._loadTaskDocuments(id);
+      window._loadTaskImages      && window._loadTaskImages(id);
+    }, 50);
+  }
+}
+
 export async function refreshView(route) {
   const container = document.getElementById('view-container');
   if (!container) return;
@@ -1278,6 +1280,8 @@ export async function refreshView(route) {
   } catch (err) {
     console.error('[View] Refresh error:', err);
   }
+  // Fire dynamic loaders after HTML is in the DOM
+  _fireDynamicLoaders(route);
 }
 
 export async function renderView(route) {
@@ -1293,6 +1297,8 @@ export async function renderView(route) {
   }
   const sidebar = document.getElementById('sidebar');
   if (sidebar) { sidebar.outerHTML = renderSidebar(); if (isSuperAdmin()) loadCompaniesForScope(); }
+  // Fire dynamic loaders after HTML is in the DOM
+  _fireDynamicLoaders(route);
 }
 
 window._logout = async () => { await logout(); navigate('/login'); };
