@@ -182,7 +182,8 @@ const views = {
 
   async dashboard() {
     const profile = getProfile();
-    const companyFilter = isSuperAdmin() && _viewScope === 'global' ? {} : { company_id: _selectedCompanyId || profile.company_id };
+    const isGlobalSuperAdmin = isSuperAdmin() && _viewScope === 'global';
+    const companyFilter = isGlobalSuperAdmin ? {} : { company_id: _selectedCompanyId || profile.company_id };
     const [tenders, tasks, myTasks] = await Promise.all([
       supabase.from('tenders').select('id, status, deadline', { count: 'exact' }).match(companyFilter),
       supabase.from('tasks').select('id, status', { count: 'exact' }).match(companyFilter),
@@ -232,7 +233,7 @@ const views = {
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-bold text-white">Dashboard</h1>
-          <p class="text-sm text-slate-400 mt-0.5">${isSuperAdmin() && _viewScope === 'global' ? 'Global Overview' : _selectedCompanyId ? 'Company View' : profile.companies?.name || 'Overview'}</p>
+          <p class="text-sm text-slate-400 mt-0.5">${isGlobalSuperAdmin ? 'Global Overview' : _selectedCompanyId ? 'Company View' : profile.companies?.name || 'Overview'}</p>
         </div>
         ${hasRoleLevel('bid_manager') ? `<a href="#/tenders/new" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">${icon('plus')} New Tender</a>` : ''}
       </div>
@@ -249,8 +250,9 @@ const views = {
 
   async tenders() {
     const profile = getProfile();
+    const isGlobalAdmin = isSuperAdmin() && _viewScope === 'global';
     const query = supabase.from('tenders').select('*, profiles!tenders_created_by_fkey(full_name)').order('created_at', { ascending: false });
-    if (!(isSuperAdmin() && _viewScope === 'global')) query.eq('company_id', _selectedCompanyId || profile.company_id);
+    if (!isGlobalAdmin) query.eq('company_id', _selectedCompanyId || profile.company_id);
     const { data: tenders } = await query;
 
     const canBulk = hasRoleLevel('it_admin');
@@ -371,7 +373,7 @@ const views = {
             <button onclick="window._editTender('${id}')" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">Edit</button>
             <button onclick="window._deleteTender('${id}')" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition">Delete</button>
           ` : ''}
-          ${isLocked && isSuperAdmin() ? `
+          ${isLocked && hasRoleLevel('it_admin') ? `
             <button onclick="window._unlockTender('${id}')" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition">🔓 Unlock Tender</button>
           ` : ''}
           ${!isLocked && hasRoleLevel('bid_manager') ? `<a href="#/tenders/${id}/compile" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition">Compile & Submit</a>` : ''}
@@ -446,11 +448,12 @@ const views = {
   async tasks() {
     const profile = getProfile();
     let query = supabase.from('tasks').select('*, tenders(title, deadline), profiles!tasks_assigned_to_fkey(full_name)').order('priority', { ascending: false });
-    if (!isSuperAdmin()) query = query.eq('assigned_to', profile.id);
+    if (!hasRoleLevel('it_admin')) query = query.eq('assigned_to', profile.id);
+    if (!isSuperAdmin()) query = query.eq('company_id', profile.company_id);
     const { data: tasks } = await query.limit(50);
 
     let html = `<div class="view-enter space-y-6">
-      <h1 class="text-xl font-bold text-white">${isSuperAdmin() ? 'All Tasks' : 'My Tasks'}</h1>
+      <h1 class="text-xl font-bold text-white">${hasRoleLevel('it_admin') ? 'All Tasks' : 'My Tasks'}</h1>
       <div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
         <table class="w-full text-sm">
           <thead><tr class="border-b border-slate-700/40">
