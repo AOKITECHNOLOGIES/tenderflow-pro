@@ -501,7 +501,7 @@ const views = {
     const canEdit = !isLocked && (task.assigned_to === getProfile().id || hasRoleLevel('bid_manager'));
     const draft = getDraftOffline(id);
 
-    return `<div class="view-enter max-w-3xl space-y-6">
+    const html = `<div class="view-enter max-w-3xl space-y-6">
       <div>
         <a href="#/tenders/${task.tender_id}" class="text-xs text-brand-400 hover:text-brand-300">← ${task.tenders?.title || 'Back'}</a>
         <h1 class="text-xl font-bold text-white mt-2">${task.title}</h1>
@@ -574,6 +574,17 @@ const views = {
         <input id="task-file-input" type="file" class="hidden" onchange="window._uploadTaskDoc('${id}', this)" />
       </div>
     </div>`;
+
+    // Auto-load dynamic sections after the HTML is in the DOM
+    setTimeout(() => {
+      if (hasRoleLevel('bid_manager') && !isLocked) {
+        window._loadTaskAssignFields(id);
+      }
+      if (window._loadTaskDocuments) window._loadTaskDocuments(id);
+      if (window._loadTaskImages) window._loadTaskImages(id);
+    }, 50);
+
+    return html;
   },
 
   async documents() {
