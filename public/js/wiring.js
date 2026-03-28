@@ -18,16 +18,6 @@ export function attachDynamicHandlers(route) {
   }
 }
 
-// ── Auto-fire attachDynamicHandlers on every navigation ───────────────────────
-// This ensures dynamic sections always load even if renderView doesn't
-// explicitly call attachDynamicHandlers (e.g. refreshView path)
-window.addEventListener('hashchange', () => {
-  setTimeout(() => {
-    const route = getCurrentRoute();
-    if (route) attachDynamicHandlers(route);
-  }, 120);
-});
-
 // ── Tender Create ─────────────────────────────────────────────────────────────
 function attachTenderCreateHandlers() {
   const form      = document.getElementById('create-tender-form');
