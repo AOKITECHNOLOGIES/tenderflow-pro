@@ -839,14 +839,10 @@ const views = {
           const pageText = content.items
             .map(item => item.str)
             .join(' ')
-            .replace(/[^ -~ -ɏ
-
-	]/g, ' ')
+            .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ')
             .replace(/\s{3,}/g, ' ')
             .trim();
-          if (pageText.length > 10) text += pageText + '
-
-';
+          if (pageText.length > 10) text += pageText + '\n\n';
         }
         if (text.trim().length < 50) throw new Error('PDF appears to be image-based or scanned — no readable text found');
         return text.trim();
@@ -857,19 +853,14 @@ const views = {
         const result = await mammoth.extractRawText({ arrayBuffer });
         if (!result.value || result.value.trim().length < 20) throw new Error('Could not extract text from Word document');
         return result.value
-          .replace(/[^ -~ -ɏ
-
-	]/g, ' ')
-          .replace(/
-{4,}/g, '
-
-')
+          .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ')
+          .replace(/\n{4,}/g, '\n\n')
           .trim();
       }
       throw new Error(`Unsupported file type: ${file.type || name}`);
     }
 
-    window._uploadKBDocs = async (files, category, statusCallback) => {
+        window._uploadKBDocs = async (files, category, statusCallback) => {
       const fileArray = Array.from(files);
       let successCount = 0;
       let failCount = 0;
