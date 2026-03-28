@@ -814,8 +814,27 @@ const views = {
   'knowledge-base': async function() {
     const docs = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
     const dHtml = docs.length === 0 ? '<p class="text-slate-500 text-sm">No documents yet.</p>' : docs.map(d => `<div class="flex items-center justify-between p-3 bg-surface-700 rounded-lg"><div><p class="text-white text-sm font-medium">${d.name}</p><p class="text-slate-400 text-xs">${(d.size/1024).toFixed(1)} KB</p></div><button onclick="window._deleteKBDoc(${d.id})" class="text-red-400 hover:text-red-300 text-sm">Delete</button></div>`).join('');
-    window._deleteKBDoc = id => { const d=JSON.parse(localStorage.getItem('tf_kb_docs')||'[]').filter(x=>x.id!==id); localStorage.setItem('tf_kb_docs',JSON.stringify(d)); navigate('/knowledge-base'); };
-    window._uploadKBDocs = files => { Array.from(files).forEach(f => { const rd=new FileReader(); rd.onload=ev=>{const d=JSON.parse(localStorage.getItem('tf_kb_docs')||'[]');d.push({id:Date.now()+Math.random(),name:f.name,size:f.size,type:f.type,content:ev.target.result,uploadedAt:new Date().toISOString()});localStorage.setItem('tf_kb_docs',JSON.stringify(d));navigate('/knowledge-base');};rd.readAsDataURL(f);}); };
+    window._deleteKBDoc = id => {
+  const d = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]').filter(x => x.id !== id);
+  localStorage.setItem('tf_kb_docs', JSON.stringify(d));
+  const route = getCurrentRoute();
+  if (route) refreshView(route);
+};
+    window._uploadKBDocs = files => {
+  Array.from(files).forEach(f => {
+    const rd = new FileReader();
+    rd.onload = ev => {
+      const d = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
+      d.push({ id: Date.now() + Math.random(), name: f.name, size: f.size, type: f.type, content: ev.target.result, uploadedAt: new Date().toISOString() });
+      localStorage.setItem('tf_kb_docs', JSON.stringify(d));
+    };
+    rd.onloadend = () => {
+      const route = getCurrentRoute();
+      if (route) refreshView(route);
+    };
+    rd.readAsDataURL(f);
+  });
+};
     return `<div class="space-y-6"><div class="flex items-center justify-between"><div><h1 class="text-2xl font-bold text-white">Knowledge Base</h1><p class="text-slate-400 mt-1">Upload company collateral used to answer RFP questions</p></div><button onclick="document.getElementById('kb-file-input').click()" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-medium">Upload Document</button></div><div class="grid grid-cols-3 gap-4"><div class="bg-surface-800 rounded-xl p-4 border border-slate-700"><p class="text-slate-400 text-sm">Documents</p><p class="text-2xl font-bold text-white">${docs.length}</p></div><div class="bg-surface-800 rounded-xl p-4 border border-slate-700"><p class="text-slate-400 text-sm">File Types</p><p class="text-2xl font-bold text-white">${new Set(docs.map(d=>d.type||'misc')).size}</p></div><div class="bg-surface-800 rounded-xl p-4 border border-slate-700"><p class="text-slate-400 text-sm">Last Updated</p><p class="text-2xl font-bold text-white">${docs.length>0?new Date(docs[docs.length-1].uploadedAt).toLocaleDateString():'--'}</p></div></div><div class="bg-surface-800 rounded-xl border border-slate-700"><div class="p-4 border-b border-slate-700"><h2 class="font-semibold text-white">Uploaded Documents</h2></div><div class="p-4 space-y-2">${dHtml}</div></div><input type="file" id="kb-file-input" class="hidden" accept=".pdf,.doc,.docx,.txt,.md" multiple onchange="window._uploadKBDocs(this.files)"/></div>`;
   },
   'rfp-processor': async function() {
