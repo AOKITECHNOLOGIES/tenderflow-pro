@@ -1253,25 +1253,6 @@ async function loadCompaniesForScope() {
   }
 }
 
-// ── Fire dynamic loaders after any view renders ──────────────────────────────
-function _fireDynamicLoaders(route) {
-  // wiring.js exposes attachDynamicHandlers on window after it loads
-  // We call it here after every render so Quill, loaders, etc. always fire
-  setTimeout(() => {
-    if (window._attachDynamicHandlers) {
-      window._attachDynamicHandlers(route);
-    }
-    // Direct fallback for task panels in case wiring hasn't set the above yet
-    if (route.view === 'task-detail') {
-      const { id } = getRouteParams();
-      if (!id) return;
-      window._loadTaskAssignFields && window._loadTaskAssignFields(id);
-      window._loadTaskDocuments   && window._loadTaskDocuments(id);
-      window._loadTaskImages      && window._loadTaskImages(id);
-    }
-  }, 80);
-}
-
 export async function refreshView(route) {
   const container = document.getElementById('view-container');
   if (!container) return;
@@ -1285,8 +1266,15 @@ export async function refreshView(route) {
   } catch (err) {
     console.error('[View] Refresh error:', err);
   }
-  // Fire dynamic loaders after HTML is in the DOM
-  _fireDynamicLoaders(route);
+  // For task-detail, re-fire loaders since index.html router doesn't cover refreshView
+  if (route.view === 'task-detail') {
+    const params = (() => { const m = window.location.hash.match(/tasks\/([^/?]+)/); return m ? { id: m[1] } : {}; })();
+    if (params.id) {
+      setTimeout(() => {
+        window._attachDynamicHandlers && window._attachDynamicHandlers(route);
+      }, 80);
+    }
+  }
 }
 
 export async function renderView(route) {
@@ -1302,8 +1290,6 @@ export async function renderView(route) {
   }
   const sidebar = document.getElementById('sidebar');
   if (sidebar) { sidebar.outerHTML = renderSidebar(); if (isSuperAdmin()) loadCompaniesForScope(); }
-  // Fire dynamic loaders after HTML is in the DOM
-  _fireDynamicLoaders(route);
 }
 
 window._logout = async () => { await logout(); navigate('/login'); };
