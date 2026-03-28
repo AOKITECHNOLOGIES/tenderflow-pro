@@ -433,11 +433,32 @@ export async function extractTextFromFile(file) {
     }
   }
 
-  if (file.name.endsWith('.docx') || file.type.includes('wordprocessingml')) {
-    const mammoth = await import('https://esm.sh/mammoth@1.6.0');
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    return result.value;
+  if (file.name.endsWith('.docx') || file.name.endsWith('.doc') || file.type.includes('wordprocessingml') || file.type.includes('msword')) {
+    try {
+      const mammoth = await import('https://esm.sh/mammoth@1.6.0');
+      const arrayBuffer = await file.arrayBuffer();
+      // Use convertToHtml to preserve structure, then strip tags for text
+      const result = await mammoth.convertToHtml({ arrayBuffer });
+      // Strip HTML but preserve structure with newlines
+      return result.value
+        .replace(/<h[1-6][^>]*>/gi, '\n\n## ')
+        .replace(/<\/h[1-6]>/gi, '\n')
+        .replace(/<p[^>]*>/gi, '\n')
+        .replace(/<\/p>/gi, '')
+        .replace(/<li[^>]*>/gi, '\n• ')
+        .replace(/<\/li>/gi, '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    } catch (err) {
+      console.error('[DOCX] Extraction failed:', err.message);
+      throw new Error(`Word document extraction failed: ${err.message}`);
+    }
   }
 
   if (file.type.startsWith('text/')) {
