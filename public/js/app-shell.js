@@ -848,28 +848,123 @@ const views = {
       const btn = document.getElementById('rfp-btn');
       if (btn) btn.disabled = !(window._rfpS.rfp && window._rfpS.tmpl);
     };
-    window._doRFP = () => {
+    window._doRFP = async () => {
       const btn = document.getElementById('rfp-btn');
       btn.textContent = 'Processing…'; btn.disabled = true;
       const kb = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
-      const rd = new FileReader();
-      rd.onload = ev => {
-        const lines = ev.target.result.split(/\n/).map(l => l.trim()).filter(l => l.length > 10);
-        const qs = lines.filter(l => /\?$/.test(l) || /^(\d+[.)])/i.test(l)).slice(0, 20);
-        const questions = qs.length > 0 ? qs : lines.slice(0, 10);
-        window._rfpAns = questions.map(q => ({
-          q,
-          a: kb.length
-            ? 'Based on our company documentation, we confirm our capability and experience to fulfil this requirement. Our team meets all specified criteria.'
-            : '[No knowledge base documents found. Upload company collateral in Knowledge Base first.]'
-        }));
+
+      try {
+        // Use PDF.js for PDFs, mammoth for Word docs, plain text for txt
+        let extractedText = '';
+        const file = window._rfpS.rfp;
+
+        if (file.type === 'application/pdf') {
+          const pdfjs = window.pdfjsLib;
+          if (!pdfjs) throw new Error('PDF.js not loaded');
+          if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+            pdfjs.GlobalWorkerOptions.workerSrc =
+              'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          }
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+          for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            // Filter out garbage characters — only keep printable ASCII and common unicode
+            const pageText = content.items
+              .map(item => item.str)
+              .join(' ')
+              .replace(/[^\x20-\x7E\u00A0-\u024F\u2000-\u206F\n\r\t]/g, ' ')
+              .replace(/\s{3,}/g, ' ')
+              .trim();
+            if (pageText.length > 20) extractedText += pageText + '\n\n';
+          }
+        } else if (file.name.endsWith('.docx') || file.type.includes('wordprocessingml')) {
+          const mammoth = await import('https://esm.sh/mammoth@1.6.0');
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          extractedText = result.value;
+        } else {
+          extractedText = await file.text();
+        }
+
+        // Clean up extracted text
+        extractedText = extractedText
+          .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ')
+          .replace(/[ \t]{3,}/g, '  ')
+          .replace(/\n{4,}/g, '\n\n')
+          .trim();
+
+        if (extractedText.length < 50) {
+          throw new Error('Could not extract readable text from this document. The PDF may use custom fonts or be image-based. Try a Word (.docx) version instead.');
+        }
+
+        // Extract questions using AI
+        const { data: { session } } = await supabase.auth.getSession();
+        const kbContext = kb.length > 0
+          ? `Company Knowledge Base documents available: ${kb.map(d => d.name).join(', ')}`
+          : 'No Knowledge Base documents uploaded yet.';
+
+        const { data: aiResult } = await supabase.functions.invoke('ai-chat', {
+          body: {
+            system: `You are a tender response specialist. You will be given an RFP document and must:
+1. Extract all questions, requirements, and sections that need a response
+2. Generate professional answers based on the company knowledge base context provided
+3. Return ONLY a JSON array like this:
+[{"question": "requirement text here", "answer": "professional response here"}, ...]
+Extract up to 20 key questions/requirements. Keep answers professional and concise.
+${kbContext}`,
+            messages: [{
+              role: 'user',
+              content: `Process this RFP document and extract questions with answers:\n\n${extractedText.substring(0, 12000)}`,
+            }],
+            max_tokens: 2000,
+          },
+        });
+
+        let questions = [];
+        if (aiResult?.content?.[0]?.text) {
+          try {
+            const raw = aiResult.content[0].text;
+            const jsonMatch = raw.match(/\[[\s\S]*\]/);
+            if (jsonMatch) questions = JSON.parse(jsonMatch[0]);
+          } catch (e) {
+            // AI parse failed — fall back to line-based extraction
+          }
+        }
+
+        // Fallback: line-based extraction if AI fails
+        if (questions.length === 0) {
+          const lines = extractedText.split(/\n/).map(l => l.trim()).filter(l => l.length > 15);
+          const qs = lines.filter(l => /\?$/.test(l) || /^(\d+[\.\)]|\([a-z]\))/i.test(l)).slice(0, 20);
+          const source = qs.length > 0 ? qs : lines.slice(0, 15);
+          questions = source.map(q => ({
+            question: q,
+            answer: kb.length
+              ? 'Based on our company documentation, we confirm our capability and experience to fulfil this requirement. Our team meets all specified criteria.'
+              : '[Upload Knowledge Base documents for AI-generated answers.]',
+          }));
+        }
+
+        window._rfpAns = questions.map(q => ({ q: q.question, a: q.answer }));
         document.getElementById('rfp-result').classList.remove('hidden');
         document.getElementById('rfp-content').innerHTML = window._rfpAns.map((x, i) =>
-          `<div class="border border-slate-700 rounded-lg p-4"><p class="text-brand-400 text-sm font-medium mb-1">Q${i+1}: ${x.q.substring(0, 120)}</p><p class="text-slate-200 text-sm">${x.a}</p></div>`
+          `<div class="border border-slate-700 rounded-lg p-4">
+            <p class="text-brand-400 text-sm font-medium mb-1">Q${i+1}: ${x.q.substring(0, 200)}</p>
+            <p class="text-slate-200 text-sm leading-relaxed">${x.a}</p>
+          </div>`
         ).join('');
-        btn.textContent = 'Process RFP with AI'; btn.disabled = false;
-      };
-      rd.readAsText(window._rfpS.rfp);
+
+      } catch (err) {
+        document.getElementById('rfp-result').classList.remove('hidden');
+        document.getElementById('rfp-content').innerHTML = `
+          <div class="border border-red-500/20 bg-red-500/10 rounded-lg p-4">
+            <p class="text-red-400 text-sm font-medium">Processing failed</p>
+            <p class="text-slate-300 text-sm mt-1">${err.message}</p>
+          </div>`;
+      }
+
+      btn.textContent = 'Process RFP with AI'; btn.disabled = false;
     };
     window._dlRFP = () => {
       if (!window._rfpAns) return;
