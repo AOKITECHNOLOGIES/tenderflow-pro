@@ -4,10 +4,13 @@
 
 import { supabase } from './supabase-client.js';
 import { getProfile } from './auth.js';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } from 'https://esm.sh/docx@8.5.0';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Header, Footer, Table, TableRow, TableCell, WidthType, BorderStyle, ImageRun } from 'https://esm.sh/docx@8.5.0';
+import {
+  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
+  PageBreak, Header, Footer, Table, TableRow, TableCell,
+  WidthType, BorderStyle, ImageRun,
+} from 'https://esm.sh/docx@8.5.0';
+
 const SECTION_ORDER = [
-  
   'executive_summary', 'company_profile', 'project_approach', 'methodology',
   'technical_proposal', 'timeline', 'project_plan', 'cv_key_personnel',
   'past_experience', 'references', 'quality_assurance', 'health_safety',
@@ -332,7 +335,7 @@ export async function triggerDocumentParse(tenderId, fileText, replaceExisting) 
   return response.data;
 }
 
-// ── compileAndDownload: generates .docx via docx library ────────────────────
+// ── compileAndDownload: branded .docx output ─────────────────────────────────
 export async function compileAndDownload(tender, tasks) {
   const profile = getProfile();
   const companyName = tender.companies?.name || profile?.companies?.name || 'Company';
@@ -346,14 +349,21 @@ export async function compileAndDownload(tender, tasks) {
     .single();
 
   const b = branding || {};
-  const primaryColor = (b.primary_color || '#0ea5e9').replace('#', '');
+  const primaryColor   = (b.primary_color   || '#0ea5e9').replace('#', '');
   const secondaryColor = (b.secondary_color || '#0f172a').replace('#', '');
-  const accentColor = (b.accent_color || '#38bdf8').replace('#', '');
-  const logoUrl = b.logo_url || tender.companies?.logo_url || null;
+  const logoUrl        = b.logo_url || tender.companies?.logo_url || null;
   const proposalHeader = b.proposal_header || '';
   const proposalFooter = b.proposal_footer || `© ${new Date().getFullYear()} ${companyName}. Confidential.`;
-  const coverTemplate = b.cover_template || 'default';
+  const coverTemplate  = b.cover_template || 'default';
+  const documentFont   = b.document_font || 'Calibri';
+  const bodySize       = parseInt(b.document_font_size || '20');
+  const headingSize    = bodySize + 10;
+  const titleSize      = bodySize + 32;
 
+  const noBorder   = { style: BorderStyle.NONE,   size: 0, color: 'FFFFFF' };
+  const cellBorder = { style: BorderStyle.SINGLE,  size: 1, color: 'e2e8f0' };
+
+  // Sort and filter tasks
   const sortedTasks = [...(tasks || [])].sort((a, b) => {
     const ai = SECTION_ORDER.indexOf(a.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(a.section_type);
     const bi = SECTION_ORDER.indexOf(b.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(b.section_type);
@@ -363,106 +373,76 @@ export async function compileAndDownload(tender, tasks) {
   const compiledSections = sortedTasks
     .filter(t => t.status === 'approved' || t.content)
     .map(t => ({
-      title: t.title,
+      title:        t.title,
       section_type: t.section_type,
-      content: t.content || '[No content provided]',
-      author: t.profiles?.full_name || 'Unknown',
-      department: t.profiles?.department || 'General',
-      status: t.status,
+      content:      t.content || '[No content provided]',
+      author:       t.profiles?.full_name || 'Unknown',
+      department:   t.profiles?.department || 'General',
       is_mandatory: t.is_mandatory,
     }));
 
   const children = [];
 
-  // ── Cover page ──
-  // Logo (as URL reference in header — docx library handles this via image)
+  // ── Logo ──────────────────────────────────────────────────────────────────
   if (logoUrl) {
     try {
-      const response = await fetch(logoUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      const uint8 = new Uint8Array(arrayBuffer);
-      const contentType = response.headers.get('content-type') || 'image/png';
-      const ext = contentType.includes('png') ? 'png' : contentType.includes('svg') ? 'svg' : 'jpg';
-      const { ImageRun } = await import('https://esm.sh/docx@8.5.0');
+      const res       = await fetch(logoUrl);
+      const buf       = await res.arrayBuffer();
+      const uint8     = new Uint8Array(buf);
+      const ct        = res.headers.get('content-type') || 'image/png';
+      const imageType = ct.includes('png') ? 'png' : ct.includes('svg') ? 'svg' : 'jpg';
       children.push(new Paragraph({
-        children: [new ImageRun({
-          data: uint8,
-          transformation: { width: 150, height: 60 },
-          type: ext,
-        })],
+        children: [new ImageRun({ data: uint8, transformation: { width: 150, height: 60 }, type: imageType })],
         alignment: AlignmentType.LEFT,
         spacing: { before: 400, after: 400 },
       }));
-    } catch (e) {
-      // Logo fetch failed — skip silently
-    }
+    } catch (_) { /* skip if logo fetch fails */ }
   }
 
-  // Cover title
+  // ── Cover title ───────────────────────────────────────────────────────────
+  const coverAlign = coverTemplate === 'minimal' ? AlignmentType.CENTER : AlignmentType.LEFT;
+
   children.push(
     new Paragraph({
-      children: [new TextRun({
-        text: tender.title,
-        bold: true,
-        size: 52,
-        color: secondaryColor,
-      })],
-      alignment: coverTemplate === 'minimal' ? AlignmentType.CENTER : AlignmentType.LEFT,
+      children: [new TextRun({ text: tender.title, bold: true, size: titleSize, color: secondaryColor, font: documentFont })],
+      alignment: coverAlign,
       spacing: { before: 800, after: 300 },
     }),
     new Paragraph({
-      children: [new TextRun({
-        text: 'Tender Proposal',
-        size: 28,
-        color: primaryColor,
-      })],
-      alignment: coverTemplate === 'minimal' ? AlignmentType.CENTER : AlignmentType.LEFT,
+      children: [new TextRun({ text: 'Tender Proposal', size: bodySize + 8, color: primaryColor, font: documentFont })],
+      alignment: coverAlign,
       spacing: { after: 600 },
     }),
   );
 
-  // Cover metadata table (like Image 1)
-  const { Table, TableRow, TableCell, WidthType, BorderStyle } = await import('https://esm.sh/docx@8.5.0');
-
+  // ── Cover metadata table ──────────────────────────────────────────────────
   const metaRows = [
-    ['Document name', tender.title || '—'],
-    ['Reference', tender.reference_number || '—'],
-    ['Issued by', tender.issuing_authority || '—'],
-    ['Submitted by', companyName],
-    ['Date', new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })],
-    ['Deadline', tender.deadline ? new Date(tender.deadline).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'],
-    ['Account Manager', tender.account_manager || '—'],
-    ['Classification', 'Confidential'],
-  ].filter(([, val]) => val && val !== '—' || ['Document name', 'Submitted by', 'Date', 'Classification'].includes(_));
-
-  const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
-  const cellBorder = { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' };
+    ['Document name',    tender.title || '—'],
+    ['Reference',        tender.reference_number || null],
+    ['Issued by',        tender.issuing_authority || null],
+    ['Submitted by',     companyName],
+    ['Account Manager',  tender.account_manager || null],
+    ['Date',             new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })],
+    ['Deadline',         tender.deadline ? new Date(tender.deadline).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' }) : null],
+    ['Classification',   'Confidential'],
+  ].filter(([, v]) => v !== null);
 
   children.push(new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [
-      ['Document name', tender.title || '—'],
-      ['Reference', tender.reference_number || '—'],
-      ['Issued by', tender.issuing_authority || '—'],
-      ['Submitted by', companyName],
-      ['Date', new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })],
-      tender.deadline ? ['Deadline', new Date(tender.deadline).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })] : null,
-      tender.account_manager ? ['Account Manager', tender.account_manager] : null,
-      ['Classification', 'Confidential'],
-    ].filter(Boolean).map(([label, value]) => new TableRow({
+    rows: metaRows.map(([label, value]) => new TableRow({
       children: [
         new TableCell({
           width: { size: 30, type: WidthType.PERCENTAGE },
           borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
           children: [new Paragraph({
-            children: [new TextRun({ text: label, bold: true, size: 20, color: '64748b' })],
+            children: [new TextRun({ text: label, bold: true, size: bodySize - 2, color: '64748b', font: documentFont })],
           })],
         }),
         new TableCell({
           width: { size: 70, type: WidthType.PERCENTAGE },
           borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
           children: [new Paragraph({
-            children: [new TextRun({ text: value, size: 20 })],
+            children: [new TextRun({ text: value, size: bodySize - 2, font: documentFont })],
           })],
         }),
       ],
@@ -471,57 +451,47 @@ export async function compileAndDownload(tender, tasks) {
 
   if (proposalHeader) {
     children.push(new Paragraph({
-      children: [new TextRun({ text: proposalHeader, size: 18, color: '94a3b8', italics: true })],
+      children: [new TextRun({ text: proposalHeader, size: bodySize - 2, color: '94a3b8', italics: true, font: documentFont })],
       spacing: { before: 400 },
     }));
   }
 
-  // Page break before TOC
+  // ── Page break → Table of Contents ───────────────────────────────────────
   children.push(new Paragraph({ children: [new PageBreak()] }));
 
-  // ── Table of Contents ──
   children.push(new Paragraph({
-    children: [new TextRun({ text: 'Table of Contents', bold: true, size: 32, color: primaryColor })],
+    children: [new TextRun({ text: 'Table of Contents', bold: true, size: headingSize, color: primaryColor, font: documentFont })],
     spacing: { before: 400, after: 300 },
   }));
 
   compiledSections.forEach((section, i) => {
     children.push(new Paragraph({
       children: [
-        new TextRun({ text: `${i + 1}. ${section.title}`, size: 22 }),
+        new TextRun({ text: `${i + 1}. ${section.title}`, size: bodySize, font: documentFont }),
         section.is_mandatory
-          ? new TextRun({ text: '  [MANDATORY]', color: 'dc2626', size: 20, bold: true })
+          ? new TextRun({ text: '  [MANDATORY]', color: 'dc2626', size: bodySize - 2, bold: true, font: documentFont })
           : new TextRun(''),
       ],
       spacing: { after: 120 },
     }));
   });
 
-  // Page break before sections
+  // ── Page break → Sections ─────────────────────────────────────────────────
   children.push(new Paragraph({ children: [new PageBreak()] }));
 
-  // ── Sections ──
   compiledSections.forEach((section, i) => {
-    // Section heading with primary colour underline effect
     children.push(
       new Paragraph({
-        children: [new TextRun({
-          text: `${i + 1}. ${section.title}`,
-          bold: true,
-          size: 28,
-          color: primaryColor,
-        })],
+        children: [new TextRun({ text: `${i + 1}. ${section.title}`, bold: true, size: headingSize, color: primaryColor, font: documentFont })],
         spacing: { before: 400, after: 100 },
-        border: {
-          bottom: { style: BorderStyle.SINGLE, size: 2, color: primaryColor },
-        },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: primaryColor } },
       }),
       new Paragraph({
         children: [
-          new TextRun({ text: `Author: ${section.author}`, color: '94a3b8', size: 18 }),
-          new TextRun({ text: `  |  Dept: ${section.department}`, color: '94a3b8', size: 18 }),
+          new TextRun({ text: `Author: ${section.author}`, color: '94a3b8', size: bodySize - 4, font: documentFont }),
+          new TextRun({ text: `  |  Dept: ${section.department}`, color: '94a3b8', size: bodySize - 4, font: documentFont }),
           section.is_mandatory
-            ? new TextRun({ text: '  |  MANDATORY', color: 'dc2626', bold: true, size: 18 })
+            ? new TextRun({ text: '  |  MANDATORY', color: 'dc2626', bold: true, size: bodySize - 4, font: documentFont })
             : new TextRun(''),
         ],
         spacing: { after: 200 },
@@ -529,10 +499,9 @@ export async function compileAndDownload(tender, tasks) {
     );
 
     const plainText = stripHtml(section.content);
-    const paragraphs = plainText.split('\n').filter(p => p.trim());
-    paragraphs.forEach(para => {
+    plainText.split('\n').filter(p => p.trim()).forEach(para => {
       children.push(new Paragraph({
-        children: [new TextRun({ text: para.trim(), size: 22 })],
+        children: [new TextRun({ text: para.trim(), size: bodySize, font: documentFont })],
         spacing: { after: 160 },
       }));
     });
@@ -540,33 +509,32 @@ export async function compileAndDownload(tender, tasks) {
     children.push(new Paragraph({ spacing: { after: 300 } }));
   });
 
-  // ── Footer page ──
+  // ── Last page ─────────────────────────────────────────────────────────────
   children.push(
     new Paragraph({ children: [new PageBreak()] }),
     new Paragraph({
       children: [new TextRun({
         text: `This document was compiled by TenderFlow Pro on ${new Date().toLocaleDateString()} by ${profile?.full_name || 'Unknown'}. Contains ${compiledSections.length} sections.`,
-        size: 18,
-        color: '94a3b8',
+        size: bodySize - 4, color: '94a3b8', font: documentFont,
       })],
       alignment: AlignmentType.CENTER,
       spacing: { before: 400, after: 200 },
     }),
     new Paragraph({
-      children: [new TextRun({ text: proposalFooter, size: 18, color: '94a3b8' })],
+      children: [new TextRun({ text: proposalFooter, size: bodySize - 4, color: '94a3b8', font: documentFont })],
       alignment: AlignmentType.CENTER,
     }),
   );
 
+  // ── Build document with headers and footers ───────────────────────────────
   const doc = new Document({
     sections: [{
-      properties: {},
       headers: {
         default: new Header({
           children: [new Paragraph({
             children: [
-              new TextRun({ text: companyName, bold: true, size: 18, color: primaryColor }),
-              new TextRun({ text: `  |  ${tender.title}`, size: 18, color: '94a3b8' }),
+              new TextRun({ text: companyName, bold: true, size: bodySize - 4, color: primaryColor, font: documentFont }),
+              new TextRun({ text: `  |  ${tender.title}`, size: bodySize - 4, color: '94a3b8', font: documentFont }),
             ],
             border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' } },
           })],
@@ -575,9 +543,7 @@ export async function compileAndDownload(tender, tasks) {
       footers: {
         default: new Footer({
           children: [new Paragraph({
-            children: [
-              new TextRun({ text: `${companyName} — Confidential`, size: 16, color: '94a3b8' }),
-            ],
+            children: [new TextRun({ text: `${companyName} — Confidential`, size: bodySize - 4, color: '94a3b8', font: documentFont })],
             alignment: AlignmentType.CENTER,
             border: { top: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' } },
           })],
@@ -585,16 +551,16 @@ export async function compileAndDownload(tender, tasks) {
       },
       children,
     }],
-    title: tender.title,
+    title:   tender.title,
     subject: 'Tender Proposal',
     creator: profile?.full_name || 'TenderFlow Pro',
     company: companyName,
   });
 
   const blob = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
   a.download = (tender.title || 'tender').replace(/[^a-z0-9]/gi, '-').toLowerCase() + '-proposal.docx';
   document.body.appendChild(a);
   a.click();
