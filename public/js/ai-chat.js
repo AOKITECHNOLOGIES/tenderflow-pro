@@ -14,11 +14,9 @@ let _isThinking = false;
 
 // ── Mount the chat button + panel into the DOM ───────────────────────────────
 export function mountAIChat() {
-  // Only show for bid_manager and above
   const profile = getProfile();
   if (!profile || !hasRoleLevel('bid_manager')) return;
 
-  // Inject styles
   const style = document.createElement('style');
   style.textContent = `
     #ai-chat-panel {
@@ -34,21 +32,15 @@ export function mountAIChat() {
       opacity: 1;
       pointer-events: all;
     }
-    #ai-chat-btn {
-      transition: all 0.2s ease;
-    }
-    #ai-chat-btn:hover {
-      transform: scale(1.05);
-    }
+    #ai-chat-btn { transition: all 0.2s ease; }
+    #ai-chat-btn:hover { transform: scale(1.05); }
     .chat-msg-user { animation: msgIn 0.2s ease-out; }
     .chat-msg-ai   { animation: msgIn 0.2s ease-out; }
     @keyframes msgIn {
       from { opacity: 0; transform: translateY(6px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    .thinking-dot {
-      animation: blink 1.2s infinite;
-    }
+    .thinking-dot { animation: blink 1.2s infinite; }
     .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
     .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
     @keyframes blink {
@@ -66,10 +58,11 @@ export function mountAIChat() {
     .chat-prose strong { color: #e2e8f0; font-weight: 600; }
     .chat-prose code { background: #1e293b; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; color: #7dd3fc; }
     .chat-prose h3 { font-size: 0.9em; font-weight: 600; color: #e2e8f0; margin-bottom: 0.3em; margin-top: 0.6em; }
+    .kb-indicator { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
   `;
   document.head.appendChild(style);
 
-  // Chat button
   const btn = document.createElement('button');
   btn.id = 'ai-chat-btn';
   btn.className = 'fixed bottom-6 right-6 z-[130] w-auto bg-violet-600 hover:bg-violet-500 text-white rounded-full shadow-xl shadow-violet-900/40 flex items-center justify-center gap-2 px-4 py-3';
@@ -83,12 +76,10 @@ export function mountAIChat() {
   btn.onclick = toggleChat;
   document.body.appendChild(btn);
 
-  // Chat panel
   const panel = document.createElement('div');
   panel.id = 'ai-chat-panel';
   panel.className = 'hidden-panel fixed bottom-0 right-0 z-[160] w-full max-w-md h-[85vh] bg-surface-900 border-l border-t border-slate-700/60 shadow-2xl flex flex-col rounded-tl-2xl';
   panel.innerHTML = `
-    <!-- Header -->
     <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 shrink-0">
       <div class="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center shrink-0">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
@@ -98,6 +89,10 @@ export function mountAIChat() {
         <p class="text-xs text-slate-500" id="ai-chat-context-label">Loading context...</p>
       </div>
       <div class="flex items-center gap-2">
+        <div id="ai-kb-indicator" class="hidden items-center gap-1 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full" title="Knowledge Base loaded">
+          <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full kb-indicator"></span>
+          <span class="text-[10px] text-emerald-400">KB</span>
+        </div>
         <button onclick="window._aiChatClear()" title="Clear chat" class="text-slate-500 hover:text-slate-300 transition p-1 rounded">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
         </button>
@@ -107,36 +102,32 @@ export function mountAIChat() {
       </div>
     </div>
 
-    <!-- Messages -->
     <div id="ai-chat-messages" class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
       <div class="chat-msg-ai flex gap-3">
         <div class="w-6 h-6 bg-violet-600 rounded-full flex items-center justify-center shrink-0 mt-0.5">
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
         </div>
         <div class="bg-surface-800 border border-slate-700/40 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-300 max-w-[85%] chat-prose">
-          <p>Hi! I'm your TenderFlow assistant. I can see your current page context and help with:</p>
+          <p>Hi! I'm your TenderFlow assistant. I have access to:</p>
           <ul>
-            <li>Writing proposal sections</li>
-            <li>Understanding tender requirements</li>
-            <li>Task and deadline questions</li>
-            <li>B-BBEE, compliance, and bid strategy</li>
+            <li>Your current page context and tender details</li>
+            <li>Your Knowledge Base documents</li>
+            <li>Your document repository</li>
+            <li>Your active tasks and deadlines</li>
           </ul>
-          <p class="mt-2 text-slate-400 text-xs">Ask me anything about this tender or your tasks.</p>
+          <p class="mt-2 text-slate-400 text-xs">Ask me anything about your tenders, internal processes, or company documents.</p>
         </div>
       </div>
     </div>
 
-    <!-- Suggestions -->
-    <div id="ai-chat-suggestions" class="px-4 py-2 flex gap-2 overflow-x-auto shrink-0 border-t border-slate-800/60">
-    </div>
+    <div id="ai-chat-suggestions" class="px-4 py-2 flex gap-2 overflow-x-auto shrink-0 border-t border-slate-800/60"></div>
 
-    <!-- Input -->
     <div class="px-4 py-3 border-t border-slate-700/60 shrink-0">
       <div class="flex gap-2 items-end">
         <textarea
           id="ai-chat-input"
           rows="1"
-          placeholder="Ask anything about this tender..."
+          placeholder="Ask about tenders, processes, or your documents..."
           class="flex-1 px-3 py-2.5 bg-surface-800 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500/60 focus:ring-1 focus:ring-violet-500/30 resize-none transition"
           style="max-height: 120px; overflow-y: auto;"
           onkeydown="window._aiChatKeydown(event)"
@@ -150,12 +141,11 @@ export function mountAIChat() {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
-      <p class="text-[10px] text-slate-600 mt-1.5 text-center">Powered by Claude · Context-aware</p>
+      <p class="text-[10px] text-slate-600 mt-1.5 text-center">Powered by Claude · Knowledge Base + Document context</p>
     </div>
   `;
   document.body.appendChild(panel);
 
-  // Load context when page changes
   window.addEventListener('hashchange', () => {
     _contextCache = null;
     updateContextLabel();
@@ -167,16 +157,13 @@ export function mountAIChat() {
 }
 
 // ── Toggle panel ──────────────────────────────────────────────────────────────
-function toggleChat() {
-  _isOpen ? closeChat() : openChat();
-}
+function toggleChat() { _isOpen ? closeChat() : openChat(); }
 
 function openChat() {
   _isOpen = true;
   const panel = document.getElementById('ai-chat-panel');
   if (panel) { panel.classList.remove('hidden-panel'); panel.classList.add('visible-panel'); }
   document.getElementById('ai-chat-badge')?.classList.add('hidden');
-  // Hide floating button while panel is open
   const btn = document.getElementById('ai-chat-btn');
   if (btn) btn.style.display = 'none';
   setTimeout(() => document.getElementById('ai-chat-input')?.focus(), 300);
@@ -186,7 +173,6 @@ function closeChat() {
   _isOpen = false;
   const panel = document.getElementById('ai-chat-panel');
   if (panel) { panel.classList.add('hidden-panel'); panel.classList.remove('visible-panel'); }
-  // Show floating button again
   const btn = document.getElementById('ai-chat-btn');
   if (btn) btn.style.display = '';
 }
@@ -197,13 +183,48 @@ window._aiChatClear = () => {
   _contextCache = null;
   const msgs = document.getElementById('ai-chat-messages');
   if (msgs) msgs.innerHTML = '';
-  appendAIMessage("Chat cleared. I still have context from your current page — ask me anything!");
+  appendAIMessage("Chat cleared. I still have access to your Knowledge Base and current page context — ask me anything!");
   refreshSuggestions();
 };
-
 window._aiChatKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window._aiChatSend(); }
 };
+
+// ── Load Knowledge Base documents from localStorage ──────────────────────────
+function loadKnowledgeBase() {
+  try {
+    const docs = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
+    if (!docs.length) return null;
+    return docs.map(d => ({
+      name: d.name,
+      type: d.type,
+      uploadedAt: d.uploadedAt,
+      // Extract text preview from base64 content if it's a text file
+      preview: d.type?.startsWith('text/') && d.content
+        ? atob(d.content.split(',')[1] || '').substring(0, 2000)
+        : null,
+    }));
+  } catch (e) {
+    return null;
+  }
+}
+
+// ── Load documents from Supabase document vault ──────────────────────────────
+async function loadDocumentRepository() {
+  try {
+    const profile = getProfile();
+    const { data: docs } = await supabase
+      .from('documents')
+      .select('file_name, doc_type, created_at, tenders(title)')
+      .eq('company_id', profile.company_id)
+      .not('doc_type', 'eq', 'task_image')
+      .order('created_at', { ascending: false })
+      .limit(30);
+    return docs || [];
+  } catch (e) {
+    return [];
+  }
+}
 
 // ── Build context snapshot from current page ─────────────────────────────────
 async function buildContext() {
@@ -225,7 +246,22 @@ async function buildContext() {
     task: null,
     my_tasks: [],
     recent_tenders: [],
+    knowledge_base: null,
+    document_repository: [],
   };
+
+  // Load Knowledge Base from localStorage
+  const kbDocs = loadKnowledgeBase();
+  if (kbDocs?.length) {
+    ctx.knowledge_base = kbDocs;
+    // Show KB indicator in UI
+    const indicator = document.getElementById('ai-kb-indicator');
+    if (indicator) indicator.classList.remove('hidden');
+    indicator?.classList.add('flex');
+  }
+
+  // Load document repository from Supabase
+  ctx.document_repository = await loadDocumentRepository();
 
   // Fetch tender context
   if (params.id && (route?.view === 'tender-detail' || route?.view === 'tender-compile')) {
@@ -249,7 +285,6 @@ async function buildContext() {
         summary: tender.ai_analysis?.summary || null,
         info_items: (tender.ai_analysis?.information_items || []).slice(0, 10),
       };
-      // Remove full ai_analysis to keep context lean
       delete ctx.tender.ai_analysis;
     }
   }
@@ -262,7 +297,7 @@ async function buildContext() {
     if (task) ctx.task = task;
   }
 
-  // Fetch user's active tasks (always useful)
+  // Fetch user's active tasks
   const { data: myTasks } = await supabase.from('tasks')
     .select('id, title, status, due_date, tenders(title)')
     .eq('assigned_to', profile.id)
@@ -276,7 +311,7 @@ async function buildContext() {
     tender: t.tenders?.title || 'Unknown',
   }));
 
-  // Fetch recent tenders for context
+  // Fetch recent tenders
   const { data: tenders } = await supabase.from('tenders')
     .select('title, status, deadline, reference_number')
     .eq('company_id', profile.company_id)
@@ -308,6 +343,11 @@ async function updateContextLabel() {
   } else if (view === 'task-detail' && params.id) {
     const { data } = await supabase.from('tasks').select('title').eq('id', params.id).single();
     label.textContent = data ? `Context: ${data.title}` : 'Task context';
+  } else if (view === 'knowledge-base') {
+    const kbDocs = loadKnowledgeBase();
+    label.textContent = kbDocs?.length
+      ? `Knowledge Base · ${kbDocs.length} doc${kbDocs.length !== 1 ? 's' : ''} loaded`
+      : 'Knowledge Base (empty)';
   } else {
     const viewLabels = {
       dashboard: 'Dashboard overview',
@@ -316,6 +356,9 @@ async function updateContextLabel() {
       users: 'User management',
       settings: 'Settings',
       documents: 'Document vault',
+      'rfp-processor': 'RFP Processor',
+      'win-loss': 'Win / Loss Tracker',
+      integrations: 'Integrations',
     };
     label.textContent = viewLabels[view] || 'General context';
   }
@@ -328,6 +371,7 @@ async function refreshSuggestions() {
 
   const route = getCurrentRoute();
   const view = route?.view || 'dashboard';
+  const hasKB = (loadKnowledgeBase()?.length || 0) > 0;
 
   const suggestionMap = {
     'tender-detail': [
@@ -342,20 +386,31 @@ async function refreshSuggestions() {
       'How long should this section be?',
       'Give me a structure to follow',
     ],
+    'knowledge-base': [
+      'What documents do I have?',
+      'Summarise my company profile',
+      'What are our key capabilities?',
+      'Find relevant info for a tender',
+    ],
+    'documents': [
+      'What documents do I have uploaded?',
+      'Which documents are linked to tenders?',
+      'Help me find a specific document',
+    ],
     'dashboard': [
       'What are my most urgent tasks?',
       'Which tenders need attention?',
-      'Help me prioritise my work',
+      hasKB ? 'What does my Knowledge Base contain?' : 'How do I use the Knowledge Base?',
     ],
     'tenders': [
       'What makes a winning tender?',
       'How should I structure my response?',
-      'Explain the tender process',
+      hasKB ? 'Use my KB to help with a tender' : 'Explain the tender process',
     ],
     'default': [
       'How does TenderFlow work?',
       'Help me with B-BBEE compliance',
-      'What is a good pricing strategy?',
+      hasKB ? 'Search my Knowledge Base' : 'What is a good pricing strategy?',
     ],
   };
 
@@ -382,29 +437,19 @@ window._aiChatSend = async () => {
   const userMessage = input?.value.trim();
   if (!userMessage) return;
 
-  // Clear input
   if (input) { input.value = ''; input.style.height = 'auto'; }
 
-  // Add user message to UI
   appendUserMessage(userMessage);
-
-  // Add to history
   _chatHistory.push({ role: 'user', content: userMessage });
 
-  // Show thinking indicator
   _isThinking = true;
   const thinkingId = showThinking();
   setInputDisabled(true);
 
   try {
-    // Build context (cached after first call per page)
     const ctx = await buildContext();
-
-    // Build system prompt
     const systemPrompt = buildSystemPrompt(ctx);
 
-    // Call Claude via Supabase edge function proxy (avoids CORS)
-    // supabase.functions.invoke automatically attaches the session token
     const { data, error: fnError } = await supabase.functions.invoke('ai-chat', {
       body: {
         system: systemPrompt,
@@ -417,14 +462,11 @@ window._aiChatSend = async () => {
     if (data?.error) throw new Error(data.error);
     const assistantMessage = data?.content?.[0]?.text || 'Sorry, I could not generate a response.';
 
-    // Add to history
     _chatHistory.push({ role: 'assistant', content: assistantMessage });
 
-    // Remove thinking, show response
     removeThinking(thinkingId);
     appendAIMessage(assistantMessage);
 
-    // Keep history to last 20 messages to avoid token bloat
     if (_chatHistory.length > 20) _chatHistory = _chatHistory.slice(-20);
 
   } catch (err) {
@@ -438,7 +480,7 @@ window._aiChatSend = async () => {
   }
 };
 
-// ── Build system prompt with page context ────────────────────────────────────
+// ── Build system prompt with page context + KB + documents ───────────────────
 function buildSystemPrompt(ctx) {
   const roleLabels = {
     super_admin: 'Super Administrator',
@@ -468,6 +510,46 @@ You are an expert in:
 - Bid strategy and win themes
 - Project management and implementation plans`;
 
+  // ── Knowledge Base context ──
+  if (ctx.knowledge_base?.length) {
+    prompt += `
+
+## Company Knowledge Base (${ctx.knowledge_base.length} documents)
+The user has uploaded the following company documents to their Knowledge Base. Use these when answering questions about internal processes, company capabilities, or when helping write tender responses:
+
+${ctx.knowledge_base.map((doc, i) => {
+  let entry = `### Document ${i + 1}: ${doc.name}
+- Type: ${doc.type || 'Unknown'}
+- Uploaded: ${doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : 'Unknown'}`;
+  if (doc.preview) {
+    entry += `\n- Content Preview:\n\`\`\`\n${doc.preview.substring(0, 1500)}\n\`\`\``;
+  }
+  return entry;
+}).join('\n\n')}
+
+When the user asks about company processes, capabilities, or internal information, reference these documents by name. If a document has a content preview, use it to answer questions accurately.`;
+  } else {
+    prompt += `
+
+## Knowledge Base
+No documents have been uploaded to the Knowledge Base yet. If the user asks about internal processes or company information, suggest they upload relevant documents (company profile, previous proposals, process documents) to the Knowledge Base for better AI assistance.`;
+  }
+
+  // ── Document repository context ──
+  if (ctx.document_repository?.length) {
+    prompt += `
+
+## Document Repository (${ctx.document_repository.length} files)
+These documents exist in the company's document vault:
+
+${ctx.document_repository.map(doc =>
+  `- ${doc.file_name} [${(doc.doc_type || 'document').replace(/_/g, ' ')}]${doc.tenders?.title ? ` — linked to: ${doc.tenders.title}` : ''} (${new Date(doc.created_at).toLocaleDateString()})`
+).join('\n')}
+
+Reference these when the user asks about uploaded files, documents linked to specific tenders, or their document history.`;
+  }
+
+  // ── Tender context ──
   if (ctx.tender) {
     prompt += `
 
@@ -489,6 +571,7 @@ ${ctx.tender.info_items?.length ? `### Key Information Items:
 ${ctx.tender.info_items.map(i => `- ${i.title}: ${i.detail}`).join('\n')}` : ''}`;
   }
 
+  // ── Task context ──
   if (ctx.task) {
     prompt += `
 
@@ -501,9 +584,12 @@ ${ctx.tender.info_items.map(i => `- ${i.title}: ${i.detail}`).join('\n')}` : ''}
 - Deadline: ${ctx.task.tenders?.deadline ? new Date(ctx.task.tenders.deadline).toLocaleDateString() : 'Not set'}
 ${ctx.task.description ? `- Brief: ${ctx.task.description}` : ''}
 ${ctx.task.review_notes ? `- Revision Notes: ${ctx.task.review_notes}` : ''}
-${ctx.task.content ? `- Current Content (first 500 chars): ${ctx.task.content.substring(0, 500)}${ctx.task.content.length > 500 ? '...' : ''}` : '- No content written yet'}`;
+${ctx.task.content ? `- Current Content (first 500 chars): ${ctx.task.content.substring(0, 500)}${ctx.task.content.length > 500 ? '...' : ''}` : '- No content written yet'}
+
+When helping write this section, use relevant information from the Knowledge Base documents above if available.`;
   }
 
+  // ── Active tasks ──
   if (ctx.my_tasks?.length) {
     prompt += `
 
@@ -511,6 +597,7 @@ ${ctx.task.content ? `- Current Content (first 500 chars): ${ctx.task.content.su
 ${ctx.my_tasks.map(t => `- [${t.status}] "${t.title}" — ${t.tender} (Due: ${t.due})`).join('\n')}`;
   }
 
+  // ── Recent tenders ──
   if (ctx.recent_tenders?.length) {
     prompt += `
 
@@ -527,8 +614,11 @@ ${ctx.recent_tenders.map(t => `- ${t.title} [${t.status}] Ref: ${t.ref} — Due:
 - For South African tenders, always consider PPPFA 80/20 or 90/10 scoring, B-BBEE requirements, and CSD requirements
 - If asked to write a section, produce a proper professional draft suitable for a tender submission
 - Reference specific task names, deadlines, and tender details from the context above when relevant
+- When answering questions about internal processes or company capabilities, reference specific Knowledge Base documents by name
+- If the Knowledge Base has content previews, use that information to give accurate, company-specific answers
 - Keep responses focused — if a question is vague, answer the most likely interpretation then ask for clarification
-- Never make up tender requirements or deadlines not in the context`;
+- Never make up tender requirements or deadlines not in the context
+- If asked about something not in the Knowledge Base, say so and suggest what documents would be helpful to upload`;
 
   return prompt;
 }
@@ -558,8 +648,6 @@ function appendAIMessage(text, isError = false) {
     </div>`;
   msgs.appendChild(div);
   scrollToBottom();
-
-  // Show badge if panel is closed
   if (!_isOpen) {
     document.getElementById('ai-chat-badge')?.classList.remove('hidden');
   }
@@ -613,30 +701,17 @@ function escapeHtml(text) {
 
 function markdownToHtml(text) {
   return text
-    // Code blocks
     .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre style="background:#1e293b;padding:8px 12px;border-radius:6px;overflow-x:auto;font-size:0.8em;margin:6px 0;"><code>$1</code></pre>')
-    // Inline code
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Bold
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    // Italic
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    // H3
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    // H2
     .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-    // Unordered lists
     .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
     .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-    // Ordered lists
     .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    // Paragraphs (double newline)
     .replace(/\n\n/g, '</p><p>')
-    // Single newlines
     .replace(/\n/g, '<br>')
-    // Wrap in paragraph
     .replace(/^(.+)/, '<p>$1')
     .replace(/(.+)$/, '$1</p>');
 }
-
-console.log('[TenderFlow] AI Chat module loaded');
