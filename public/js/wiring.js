@@ -7,7 +7,7 @@ import { getProfile, hasRoleLevel, isSuperAdmin, saveDraftOffline } from './auth
 import { getRouteParams, getCurrentRoute, navigate } from './router.js';
 import { renderView, refreshView } from './app-shell.js';
 
-// ── Route-specific post-render hooks ───h──────────────────────────────────────
+// ── Route-specific post-render hooks ──────────────────────────────────────────
 export function attachDynamicHandlers(route) {
   switch (route.view) {
     case 'tender-create':   attachTenderCreateHandlers(); break;
@@ -18,15 +18,24 @@ export function attachDynamicHandlers(route) {
   }
 }
 
+// ── Auto-fire attachDynamicHandlers on every navigation ───────────────────────
+// This ensures dynamic sections always load even if renderView doesn't
+// explicitly call attachDynamicHandlers (e.g. refreshView path)
+window.addEventListener('hashchange', () => {
+  setTimeout(() => {
+    const route = getCurrentRoute();
+    if (route) attachDynamicHandlers(route);
+  }, 120);
+});
+
 // ── Tender Create ─────────────────────────────────────────────────────────────
 function attachTenderCreateHandlers() {
-  const form    = document.getElementById('create-tender-form');
-  const dropzone = document.getElementById('rfq-dropzone');
+  const form      = document.getElementById('create-tender-form');
+  const dropzone  = document.getElementById('rfq-dropzone');
   const fileInput = document.getElementById('tf-rfq-file');
   const fileName  = document.getElementById('rfq-file-name');
   if (!form) return;
 
-  // Dropzone click
   dropzone?.addEventListener('click', () => fileInput?.click());
   fileInput?.addEventListener('change', () => {
     const f = fileInput.files?.[0];
@@ -36,17 +45,17 @@ function attachTenderCreateHandlers() {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('tender-form-error');
-    const title = document.getElementById('tf-title')?.value.trim();
-    const ref   = document.getElementById('tf-ref')?.value.trim();
-    const deadline = document.getElementById('tf-deadline')?.value;
+    const title     = document.getElementById('tf-title')?.value.trim();
+    const ref       = document.getElementById('tf-ref')?.value.trim();
+    const deadline  = document.getElementById('tf-deadline')?.value;
     const authority = document.getElementById('tf-authority')?.value.trim();
-    const desc  = document.getElementById('tf-desc')?.value.trim();
-    const rfqFile = document.getElementById('tf-rfq-file')?.files?.[0];
+    const desc      = document.getElementById('tf-desc')?.value.trim();
+    const rfqFile   = document.getElementById('tf-rfq-file')?.files?.[0];
 
     if (!title) { errEl.textContent = 'Title is required.'; errEl.classList.remove('hidden'); return; }
     errEl.classList.add('hidden');
 
-    const profile = getProfile();
+    const profile   = getProfile();
     const submitBtn = form.querySelector('button[type="submit"]');
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Creating...'; }
 
@@ -70,7 +79,6 @@ function attachTenderCreateHandlers() {
       return;
     }
 
-    // Upload RFQ if provided
     if (rfqFile && tender) {
       await uploadRFQ(rfqFile, tender.id, profile);
     }
@@ -81,7 +89,6 @@ function attachTenderCreateHandlers() {
 }
 
 async function uploadRFQ(file, tenderId, profile) {
-  // Show parsing progress overlay
   const overlay = document.createElement('div');
   overlay.id = 'parse-overlay';
   overlay.className = 'fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center';
@@ -99,10 +106,10 @@ async function uploadRFQ(file, tenderId, profile) {
   document.body.appendChild(overlay);
 
   function setProgress(pct, status, sub) {
-    const bar = document.getElementById('parse-bar');
+    const bar      = document.getElementById('parse-bar');
     const statusEl = document.getElementById('parse-status');
-    const subEl = document.getElementById('parse-substatus');
-    const pctEl = document.getElementById('parse-pct');
+    const subEl    = document.getElementById('parse-substatus');
+    const pctEl    = document.getElementById('parse-pct');
     if (bar) bar.style.width = pct + '%';
     if (statusEl) statusEl.textContent = status;
     if (subEl && sub) subEl.textContent = sub;
@@ -110,12 +117,11 @@ async function uploadRFQ(file, tenderId, profile) {
   }
 
   try {
-    // Upload file
     setProgress(15, 'Uploading document...', 'Storing your RFQ file securely');
     const ext = file.name.split('.').pop();
     const storagePath = `${profile.company_id}/${tenderId}/rfq_${Date.now()}.${ext}`;
     const { error: uploadErr } = await supabase.storage.from('documents').upload(storagePath, file, { upsert: true });
-    if (uploadErr) { console.error('[RFQ Upload]', uploadErr); overlay.remove(); return; }
+    if (uploadErr) { overlay.remove(); return; }
 
     setProgress(30, 'File stored...', 'Recording document metadata');
     await supabase.from('documents').insert({
@@ -129,7 +135,6 @@ async function uploadRFQ(file, tenderId, profile) {
       doc_type: 'rfq_source',
     });
 
-    // Extract text
     setProgress(45, 'Extracting text...', 'Reading document contents');
     const { data: { session } } = await supabase.auth.getSession();
     const { extractTextFromFile } = await import('./compiler.js');
@@ -145,7 +150,6 @@ async function uploadRFQ(file, tenderId, profile) {
     });
 
     if (parseErr) {
-      console.warn('[RFQ Parse] parse-document failed, trying parse-rfq fallback:', parseErr);
       await supabase.functions.invoke('parse-rfq', {
         body: { tender_id: tenderId, text },
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -157,7 +161,6 @@ async function uploadRFQ(file, tenderId, profile) {
     setProgress(100, 'Done!', 'Tasks created successfully');
     await new Promise(r => setTimeout(r, 600));
   } catch (err) {
-    console.error('[RFQ Parse]', err);
     window.TF?.toast?.('Document uploaded but AI parse failed — you can import it manually from the tender page', 'warning');
   } finally {
     overlay.remove();
@@ -166,7 +169,8 @@ async function uploadRFQ(file, tenderId, profile) {
 
 // ── Tender Detail ─────────────────────────────────────────────────────────────
 function attachTenderDetailHandlers() {
-  // _addTask is invoked inline from the view
+  // _addTask is wired inline from the view HTML
+  // Nothing additional needed here — task rows are interactive via inline onclick
 }
 
 window._addTask = async (tenderId) => {
@@ -246,16 +250,18 @@ window._addTask = async (tenderId) => {
 // ── Task Detail ───────────────────────────────────────────────────────────────
 function attachTaskDetailHandlers() {
   const { id } = getRouteParams();
-  loadTaskDocuments(id);
-  window._loadTaskAssignFields(id);
+  if (!id) return;
+
+  // Load all dynamic panels
+  window._loadTaskDocuments(id);
+  window._loadTaskAssignFields && window._loadTaskAssignFields(id);
   window._loadTaskImages(id);
 
   // Initialize Quill editor if present
   const editorEl = document.getElementById('quill-editor');
   if (editorEl && window.Quill) {
-    // Clean up any previous Quill instance
     if (window._quillEditor) {
-      try { window._quillEditor = null; } catch(_) {}
+      try { window._quillEditor = null; } catch (_) {}
     }
 
     window._quillEditor = new Quill('#quill-editor', {
@@ -276,14 +282,12 @@ function attachTaskDetailHandlers() {
       },
     });
 
-    // Load existing content
     const hidden = document.getElementById('task-content-hidden');
     if (hidden?.textContent?.trim()) {
       window._quillEditor.root.innerHTML = hidden.textContent;
     }
 
-    // Dark-mode toolbar styling
-    const toolbar = editorEl.querySelector('.ql-toolbar');
+    const toolbar   = editorEl.querySelector('.ql-toolbar');
     const container = editorEl.querySelector('.ql-container');
     if (toolbar) {
       toolbar.style.cssText = [
@@ -291,10 +295,7 @@ function attachTaskDetailHandlers() {
         'border-radius: 8px 8px 0 0',
         'background: #1e293b',
       ].join('; ');
-      // Style toolbar buttons
-      toolbar.querySelectorAll('button, .ql-picker').forEach(el => {
-        el.style.color = '#94a3b8';
-      });
+      toolbar.querySelectorAll('button, .ql-picker').forEach(el => { el.style.color = '#94a3b8'; });
       toolbar.querySelectorAll('.ql-stroke').forEach(el => el.style.stroke = '#94a3b8');
       toolbar.querySelectorAll('.ql-fill').forEach(el => el.style.fill = '#94a3b8');
     }
@@ -309,8 +310,6 @@ function attachTaskDetailHandlers() {
       ].join('; ');
     }
 
-    // Fix: Quill applies list/indent to entire block by default.
-    // Scope list styles so they only apply to the specific list element, not the whole editor.
     const styleId = 'quill-scope-fix';
     if (!document.getElementById(styleId)) {
       const style = document.createElement('style');
@@ -370,6 +369,9 @@ async function loadTaskDocuments(taskId) {
     </div>`;
   }).join('');
 }
+
+// Expose on window so app-shell's setTimeout can call it too
+window._loadTaskDocuments = loadTaskDocuments;
 
 window._uploadTaskDoc = async (taskId, input) => {
   const file = input?.files?.[0];
@@ -481,7 +483,9 @@ window._previewImage = (url, name) => {
     <p class="text-xs text-slate-400 text-center mt-2">${name}</p>
   </div>`;
   modal.addEventListener('click', () => modal.remove());
-  document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', esc); } });
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', esc); }
+  });
   document.body.appendChild(modal);
 };
 
@@ -497,15 +501,18 @@ window._deleteTaskImage = async (docId, storagePath, taskId) => {
 async function attachCompileHandlers() {
   const { id } = getRouteParams();
   const container = document.getElementById('view-container');
-  if (!container) return;
+  if (!container || !id) return;
 
-  // Render compile view properly
   const { data: tender } = await supabase.from('tenders').select('*').eq('id', id).single();
   const { data: tasks } = await supabase.from('tasks').select('*').eq('tender_id', id).eq('status', 'approved').order('priority', { ascending: false });
 
   if (!tender) return;
 
-  const incompleteCount = await supabase.from('tasks').select('id', { count: 'exact' }).eq('tender_id', id).neq('status', 'approved').then(r => r.count || 0);
+  const incompleteCount = await supabase.from('tasks')
+    .select('id', { count: 'exact' })
+    .eq('tender_id', id)
+    .neq('status', 'approved')
+    .then(r => r.count || 0);
 
   container.innerHTML = `<div class="view-enter max-w-2xl space-y-6">
     <div>
@@ -530,7 +537,7 @@ async function attachCompileHandlers() {
   </div>`;
 
   document.getElementById('compile-btn')?.addEventListener('click', async () => {
-    const btn = document.getElementById('compile-btn');
+    const btn    = document.getElementById('compile-btn');
     const output = document.getElementById('compile-output');
     btn.disabled = true; btn.textContent = 'Compiling...';
     try {
@@ -581,5 +588,3 @@ function initToastSystem() {
 
 // ── Global init ───────────────────────────────────────────────────────────────
 initToastSystem();
-
-
