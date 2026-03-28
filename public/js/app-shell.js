@@ -817,17 +817,105 @@ const views = {
       if (route) refreshView(route);
     };
 
-    window._uploadKBDocs = (files, category) => {
-      Array.from(files).forEach(f => {
-        const rd = new FileReader();
-        rd.onload = ev => {
+    // ── KB text extraction ───────────────────────────────────────────────────
+    async function _extractKBText(file) {
+      const name = file.name.toLowerCase();
+      if (file.type.startsWith('text/') || name.endsWith('.txt') || name.endsWith('.md')) {
+        return await file.text();
+      }
+      if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
+        const pdfjs = window.pdfjsLib;
+        if (!pdfjs) throw new Error('PDF.js not available — ensure script tag is in index.html');
+        if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+          pdfjs.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+        let text = '';
+        for (let i = 1; i <= Math.min(pdf.numPages, 50); i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items
+            .map(item => item.str)
+            .join(' ')
+            .replace(/[^ -~ -ɏ
+
+	]/g, ' ')
+            .replace(/\s{3,}/g, ' ')
+            .trim();
+          if (pageText.length > 10) text += pageText + '
+
+';
+        }
+        if (text.trim().length < 50) throw new Error('PDF appears to be image-based or scanned — no readable text found');
+        return text.trim();
+      }
+      if (name.endsWith('.docx') || name.endsWith('.doc') || file.type.includes('wordprocessingml') || file.type.includes('msword')) {
+        const mammoth = await import('https://esm.sh/mammoth@1.6.0');
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        if (!result.value || result.value.trim().length < 20) throw new Error('Could not extract text from Word document');
+        return result.value
+          .replace(/[^ -~ -ɏ
+
+	]/g, ' ')
+          .replace(/
+{4,}/g, '
+
+')
+          .trim();
+      }
+      throw new Error(`Unsupported file type: ${file.type || name}`);
+    }
+
+    window._uploadKBDocs = async (files, category, statusCallback) => {
+      const fileArray = Array.from(files);
+      let successCount = 0;
+      let failCount = 0;
+      for (const f of fileArray) {
+        try {
+          if (statusCallback) statusCallback(`Extracting ${f.name}...`);
+          let extractedText = null;
+          let extractionNote = null;
+          try {
+            extractedText = await _extractKBText(f);
+            if (extractedText.length > 50000) {
+              extractedText = extractedText.substring(0, 50000);
+              extractionNote = 'Content truncated to 50,000 characters for storage';
+            }
+          } catch (extractErr) {
+            extractionNote = extractErr.message;
+            console.warn(`[KB] Text extraction failed for ${f.name}:`, extractErr.message);
+          }
+          const dataUrl = await new Promise((resolve, reject) => {
+            const rd = new FileReader();
+            rd.onload = ev => resolve(ev.target.result);
+            rd.onerror = reject;
+            rd.readAsDataURL(f);
+          });
           const d = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
-          d.push({ id: Date.now() + Math.random(), name: f.name, size: f.size, type: f.type, category: category || 'company', content: ev.target.result, uploadedAt: new Date().toISOString() });
+          d.push({
+            id: Date.now() + Math.random(),
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            category: category || 'company',
+            content: dataUrl,
+            extractedText,
+            extractionNote,
+            uploadedAt: new Date().toISOString(),
+          });
           localStorage.setItem('tf_kb_docs', JSON.stringify(d));
-        };
-        rd.onloadend = () => { const route = getCurrentRoute(); if (route) refreshView(route); };
-        rd.readAsDataURL(f);
-      });
+          successCount++;
+        } catch (err) {
+          console.error(`[KB] Failed to store ${f.name}:`, err.message);
+          failCount++;
+        }
+      }
+      const route = getCurrentRoute();
+      if (route) refreshView(route);
+      return { successCount, failCount };
     };
 
     window._showKBUploadModal = () => {
