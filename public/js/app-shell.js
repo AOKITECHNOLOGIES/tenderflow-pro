@@ -427,9 +427,21 @@ const views = {
     for (const task of (tasks || [])) {
       const priority = ['Normal', 'High', 'Critical'][task.priority] || 'Normal';
       const prioColor = ['text-slate-400', 'text-amber-400', 'text-red-400'][task.priority] || 'text-slate-400';
-      html += `<tr class="hover:bg-slate-700/10">
+      html += `<tr class="hover:bg-slate-700/10" id="task-row-${task.id}">
         ${!isLocked && hasRoleLevel('bid_manager') ? `<td class="px-4 py-3"><input type="checkbox" class="task-checkbox rounded" value="${task.id}" onchange="window._updateTaskBulkBar()" /></td>` : ''}
-        <td class="px-5 py-3 cursor-pointer" onclick="location.hash='#/tasks/${task.id}'"><p class="text-white">${task.title}</p><p class="text-xs text-slate-500">${task.section_type || '—'}</p></td>
+        <td class="px-5 py-3">
+          <div class="flex items-center gap-2 group">
+            <div class="min-w-0 cursor-pointer" onclick="location.hash='#/tasks/${task.id}'">
+              <p class="text-white" id="task-title-${task.id}">${task.title}</p>
+              <p class="text-xs text-slate-500">${task.section_type || '—'}</p>
+            </div>
+            ${!isLocked && hasRoleLevel('bid_manager') ? `
+            <button onclick="event.stopPropagation(); window._inlineEditTask('${task.id}', '${task.title.replace(/'/g, "\\'").replace(/"/g, '\\"')}')"
+              class="opacity-0 group-hover:opacity-100 transition text-slate-500 hover:text-brand-400 p-1 rounded shrink-0" title="Edit section name">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>` : ''}
+          </div>
+        </td>
         <td class="px-5 py-3 text-slate-400 cursor-pointer" onclick="location.hash='#/tasks/${task.id}'">${task.profiles?.full_name || '<span class="text-slate-600">Unassigned</span>'}</td>
         <td class="px-5 py-3 cursor-pointer" onclick="location.hash='#/tasks/${task.id}'">${statusBadge(task.status)}</td>
         <td class="px-5 py-3 ${prioColor} text-xs font-medium cursor-pointer" onclick="location.hash='#/tasks/${task.id}'">${priority}</td>
@@ -1558,6 +1570,112 @@ window._createUser = async () => {
     window.TF?.toast?.(`User "${name}" created`, 'success');
     setTimeout(() => { modal.remove(); const route = getCurrentRoute(); if (route) refreshView(route); }, 2000);
   });
+};
+
+window._addTask = async (tenderId) => {
+  const profile = getProfile();
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  modal.innerHTML = `<div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+    <h3 class="text-lg font-semibold text-white mb-4">Add Task</h3>
+    <div id="at-error" class="hidden mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm"></div>
+    <div class="space-y-4">
+      <div><label class="block text-sm text-slate-300 mb-1">Title *</label>
+        <input id="at-title" type="text" placeholder="e.g. Executive Summary" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Section Type</label>
+        <select id="at-type" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+          <option value="">— General —</option>
+          <option value="executive_summary">Executive Summary</option>
+          <option value="company_profile">Company Profile</option>
+          <option value="technical_proposal">Technical Proposal</option>
+          <option value="project_approach">Project Approach</option>
+          <option value="methodology">Methodology</option>
+          <option value="timeline">Timeline</option>
+          <option value="project_plan">Project Plan</option>
+          <option value="pricing">Pricing</option>
+          <option value="financial_proposal">Financial Proposal</option>
+          <option value="cv_key_personnel">CV / Key Personnel</option>
+          <option value="past_experience">Past Experience</option>
+          <option value="references">References</option>
+          <option value="bbbee_certificate">B-BBEE Certificate</option>
+          <option value="tax_clearance">Tax Clearance</option>
+          <option value="compliance">Compliance</option>
+          <option value="quality_assurance">Quality Assurance</option>
+          <option value="health_safety">Health &amp; Safety</option>
+          <option value="risk_management">Risk Management</option>
+          <option value="terms_conditions">Terms &amp; Conditions</option>
+        </select></div>
+      <div><label class="block text-sm text-slate-300 mb-1">Description</label>
+        <textarea id="at-desc" rows="2" placeholder="Optional notes for the assignee" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm resize-none"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="block text-sm text-slate-300 mb-1">Priority</label>
+          <select id="at-priority" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm">
+            <option value="0">Normal</option><option value="1">High</option><option value="2">Critical</option>
+          </select></div>
+        <div><label class="block text-sm text-slate-300 mb-1">Due Date</label>
+          <input id="at-due" type="datetime-local" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" /></div>
+      </div>
+      <label class="flex items-center gap-2 text-sm text-slate-300">
+        <input id="at-mandatory" type="checkbox" /> Mandatory
+      </label>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button id="at-submit" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg">Add Task</button>
+      <button id="at-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#at-cancel').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('#at-title').focus();
+  modal.querySelector('#at-title').addEventListener('keydown', e => { if (e.key === 'Enter') modal.querySelector('#at-submit').click(); });
+  modal.querySelector('#at-submit').addEventListener('click', async () => {
+    const errEl = modal.querySelector('#at-error');
+    const title = modal.querySelector('#at-title').value.trim();
+    if (!title) { errEl.textContent = 'Title is required.'; errEl.classList.remove('hidden'); return; }
+    const btn = modal.querySelector('#at-submit'); btn.disabled = true; btn.textContent = 'Adding...';
+    const insertData = {
+      tender_id: tenderId,
+      company_id: profile.company_id,
+      title,
+      section_type: modal.querySelector('#at-type').value || null,
+      description: modal.querySelector('#at-desc').value.trim() || null,
+      priority: parseInt(modal.querySelector('#at-priority').value) || 0,
+      due_date: modal.querySelector('#at-due').value || null,
+      is_mandatory: modal.querySelector('#at-mandatory').checked,
+      status: 'unassigned',
+    };
+    const { error } = await supabase.from('tasks').insert(insertData);
+    if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Add Task'; return; }
+    modal.remove();
+    window.TF?.toast?.(`Task "${title}" added`, 'success');
+    const route = getCurrentRoute(); if (route) refreshView(route);
+  });
+};
+
+window._inlineEditTask = (taskId, currentTitle) => {
+  const titleEl = document.getElementById(`task-title-${taskId}`);
+  if (!titleEl) return;
+  const original = titleEl.textContent;
+  titleEl.innerHTML = `<input id="inline-title-${taskId}" type="text" value="${currentTitle.replace(/"/g, '&quot;')}"
+    class="w-full px-2 py-1 bg-surface-900 border border-brand-500/60 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+    onclick="event.stopPropagation()" />`;
+  const input = document.getElementById(`inline-title-${taskId}`);
+  input.focus();
+  input.select();
+  const save = async () => {
+    const newTitle = input.value.trim();
+    if (!newTitle || newTitle === currentTitle) { titleEl.textContent = original; return; }
+    const { error } = await supabase.from('tasks').update({ title: newTitle }).eq('id', taskId);
+    if (error) { window.TF?.toast?.(`Rename failed: ${error.message}`, 'error'); titleEl.textContent = original; return; }
+    window.TF?.toast?.('Section renamed', 'success');
+    const route = getCurrentRoute(); if (route) refreshView(route);
+  };
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') { titleEl.textContent = original; }
+  });
+  input.addEventListener('blur', save);
 };
 
 window._approveTask = async (taskId) => {
