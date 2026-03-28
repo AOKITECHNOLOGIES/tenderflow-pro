@@ -1255,16 +1255,23 @@ async function loadCompaniesForScope() {
 
 // ── Fire dynamic loaders after any view renders ──────────────────────────────
 function _fireDynamicLoaders(route) {
-  if (route.view === 'task-detail') {
-    const { id } = getRouteParams();
-    if (!id) return;
-    // Small delay to ensure DOM is painted before querying elements
-    setTimeout(() => {
+  // Give the browser one frame to paint the HTML before querying elements
+  setTimeout(() => {
+    // Call wiring's attachDynamicHandlers for ALL routes — this handles
+    // Quill init, task loaders, compile handlers, etc.
+    import('./wiring.js').then(({ attachDynamicHandlers }) => {
+      if (attachDynamicHandlers) attachDynamicHandlers(route);
+    }).catch(() => {});
+
+    // Also directly call the task loaders as a safety net
+    if (route.view === 'task-detail') {
+      const { id } = getRouteParams();
+      if (!id) return;
       window._loadTaskAssignFields && window._loadTaskAssignFields(id);
       window._loadTaskDocuments   && window._loadTaskDocuments(id);
       window._loadTaskImages      && window._loadTaskImages(id);
-    }, 50);
-  }
+    }
+  }, 50);
 }
 
 export async function refreshView(route) {
