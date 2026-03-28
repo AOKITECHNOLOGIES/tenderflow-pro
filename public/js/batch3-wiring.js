@@ -1,49 +1,5 @@
 // batch3-wiring.js — Permanent features: Knowledge Base, RFP Processor, Win/Loss, Integrations
 
-// ── Sidebar injection ─────────────────────────────────────────────────────
-function injectB3SidebarItems() {
-  // The app sidebar: <aside> > <nav class="flex-1 overflow-y-auto..."> contains <a class="sidebar-item"> directly
-  const nav = document.querySelector('aside nav, nav.flex-1, nav[class*="overflow-y-auto"]');
-  if (!nav) return;
-  if (document.getElementById('b3-kb')) return; // already injected
-  const items = [
-    { id: 'b3-kb',           href: '#/knowledge-base',  svg: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253', label: 'Knowledge Base' },
-    { id: 'b3-rfp',          href: '#/rfp-processor',   svg: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', label: 'RFP Processor' },
-    { id: 'b3-winloss',      href: '#/win-loss',        svg: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', label: 'Win / Loss' },
-    { id: 'b3-integrations', href: '#/integrations',    svg: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1', label: 'Integrations' },
-  ];
-  items.forEach(item => {
-    if (document.getElementById(item.id)) return;
-    const a = document.createElement('a');
-    a.id = item.id;
-    a.href = item.href;
-    a.className = 'sidebar-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-surface-800/60 transition-colors';
-    a.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${item.svg}"/></svg><span>${item.label}</span>`;
-    nav.appendChild(a);
-  });
-}
-
-// Re-inject after each navigation (app rebuilds sidebar on route change)
-window.addEventListener('hashchange', () => { setTimeout(injectB3SidebarItems, 100); });
-document.addEventListener('DOMContentLoaded', injectB3SidebarItems);
-setTimeout(injectB3SidebarItems, 500);
-setTimeout(injectB3SidebarItems, 1500);
-
-// ── Route handler ─────────────────────────────────────────────────────────
-window.addEventListener('hashchange', handleB3Route);
-setTimeout(handleB3Route, 200);
-
-function handleB3Route() {
-  const hash = location.hash;
-  // Find the main content area - the app uses various selectors
-  const main = document.querySelector('main, #main-content, [data-view], .main-content, #view-container');
-  if (!main) return;
-  if (hash === '#/knowledge-base') { main.innerHTML = renderKnowledgeBaseView(); wireKB(); }
-  else if (hash === '#/rfp-processor') { main.innerHTML = renderRFPProcessorView(); wireRFP(); }
-  else if (hash === '#/win-loss') { main.innerHTML = renderWinLossView(); wireWinLoss(); }
-  else if (hash === '#/integrations') { main.innerHTML = renderIntegrationsView(); wireIntegrations(); }
-}
-
 // ── Knowledge Base ────────────────────────────────────────────────────────
 function renderKnowledgeBaseView() {
   return `
@@ -260,8 +216,8 @@ function wireWinLoss() {
     const records = JSON.parse(localStorage.getItem('tf_winloss') || '[]');
     records.push({ id: Date.now(), name, client, outcome, date: new Date().toISOString() });
     localStorage.setItem('tf_winloss', JSON.stringify(records));
-    const main = document.querySelector('main, #main-content, [data-view], .main-content, #view-container');
-    if (main) { main.innerHTML = renderWinLossView(); wireWinLoss(); }
+    const container = document.getElementById('view-container');
+    if (container) { container.innerHTML = renderWinLossView(); wireWinLoss(); }
   };
   document.getElementById('wl-export-btn').onclick = () => {
     const records = JSON.parse(localStorage.getItem('tf_winloss') || '[]');
