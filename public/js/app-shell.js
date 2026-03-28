@@ -578,11 +578,14 @@ const views = {
     // Auto-load dynamic sections after the HTML is in the DOM
     setTimeout(() => {
       if (hasRoleLevel('bid_manager') && !isLocked) {
-        window._loadTaskAssignFields(id);
+        window._loadTaskAssignFields && window._loadTaskAssignFields(id);
       }
-      if (window._loadTaskDocuments) window._loadTaskDocuments(id);
-      if (window._loadTaskImages) window._loadTaskImages(id);
-    }, 50);
+      // These are defined in wiring.js — call them if available, otherwise
+      // wiring.js's attachTaskDetailHandlers will call them via attachDynamicHandlers
+      window._loadTaskImages && window._loadTaskImages(id);
+      // loadTaskDocuments is a local fn in wiring.js — expose it if not yet done
+      window._loadTaskDocuments && window._loadTaskDocuments(id);
+    }, 100);
 
     return html;
   },
