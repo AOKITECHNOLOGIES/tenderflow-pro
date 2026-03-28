@@ -1424,8 +1424,22 @@ window._importDocument = async (tenderId) => {
     <div id="id-success" class="hidden mb-3 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm"></div>
     <div class="space-y-4">
       <div>
-        <label class="block text-sm text-slate-300 mb-1">Upload Document (PDF or DOCX)</label>
-        <input id="id-file" type="file" accept=".pdf,.docx" class="w-full px-3 py-2 bg-surface-900/60 border border-slate-600/50 rounded-lg text-white text-sm" />
+        <label class="block text-sm text-slate-300 mb-1">Upload RFP Document (PDF or DOCX)</label>
+        <div id="id-rfp-drop" onclick="document.getElementById('id-file').click()" class="border-2 border-dashed border-slate-600 rounded-xl p-5 text-center cursor-pointer hover:border-brand-500 transition-colors">
+          <p class="text-2xl mb-1">📋</p>
+          <p class="text-slate-300 text-sm font-medium" id="id-rfp-lbl">Drop RFP here or click to browse</p>
+          <p class="text-slate-500 text-xs mt-0.5">PDF, DOCX</p>
+        </div>
+        <input id="id-file" type="file" accept=".pdf,.docx" class="hidden" onchange="document.getElementById('id-rfp-lbl').textContent = this.files[0]?.name || 'Drop RFP here or click to browse'" />
+      </div>
+      <div>
+        <label class="block text-sm text-slate-300 mb-1">Upload Response Template <span class="text-slate-500">(optional)</span></label>
+        <div id="id-tmpl-drop" onclick="document.getElementById('id-tmpl-file').click()" class="border-2 border-dashed border-slate-600 rounded-xl p-5 text-center cursor-pointer hover:border-brand-500 transition-colors">
+          <p class="text-2xl mb-1">📝</p>
+          <p class="text-slate-300 text-sm font-medium" id="id-tmpl-lbl">Drop template here or click to browse</p>
+          <p class="text-slate-500 text-xs mt-0.5">DOC, DOCX, TXT</p>
+        </div>
+        <input id="id-tmpl-file" type="file" accept=".doc,.docx,.txt" class="hidden" onchange="document.getElementById('id-tmpl-lbl').textContent = this.files[0]?.name || 'Drop template here or click to browse'" />
       </div>
       <div>
         <label class="block text-sm text-slate-300 mb-1">Existing Tasks</label>
@@ -1440,6 +1454,7 @@ window._importDocument = async (tenderId) => {
       <button id="id-cancel" class="px-5 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg">Cancel</button>
     </div>
   </div>`;
+  
   document.body.appendChild(modal);
   modal.querySelector('#id-cancel').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
