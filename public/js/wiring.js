@@ -7,7 +7,7 @@ import { getProfile, hasRoleLevel, isSuperAdmin, saveDraftOffline } from './auth
 import { getRouteParams, getCurrentRoute, navigate } from './router.js';
 import { renderView, refreshView } from './app-shell.js';
 
-// ── Route-specific post-render hooks ─────────────────────────────────────────
+// ── Route-specific post-render hooks ───h──────────────────────────────────────
 export function attachDynamicHandlers(route) {
   switch (route.view) {
     case 'tender-create':   attachTenderCreateHandlers(); break;
@@ -582,4 +582,4 @@ function initToastSystem() {
 // ── Global init ───────────────────────────────────────────────────────────────
 initToastSystem();
 
-console.log('[TenderFlow] Wiring loaded');
+
