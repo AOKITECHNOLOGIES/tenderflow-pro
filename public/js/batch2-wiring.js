@@ -1,12 +1,6 @@
 // ============================================================================
 // TenderFlow Pro — Batch 2 Wiring
 // ============================================================================
-// Connects all Batch 2 modules to the existing app:
-//  - Notifications: init realtime + inject bell
-//  - Company Settings: replace admin-settings placeholder
-//  - Reports: add reports view
-//  - Bulk Import: add import button to users view
-// ============================================================================
 
 import { supabase } from './supabase-client.js';
 import { getProfile, onAuthChange, isSuperAdmin, hasRoleLevel } from './auth.js';
@@ -23,7 +17,6 @@ let _notificationsInitialized = false;
 
 onAuthChange((event) => {
   if (event === 'SIGNED_IN' && !_notificationsInitialized) {
-    // Small delay to let app shell mount first
     setTimeout(() => {
       initNotifications();
       _notificationsInitialized = true;
@@ -40,12 +33,10 @@ const _origRenderView = renderView;
 const _enhancedRenderView = async (route) => {
   await _origRenderView(route);
 
-  // Re-inject bell (sidebar re-render removes the top bar)
   if (_notificationsInitialized) {
     setTimeout(() => initNotifications(), 100);
   }
 
-  // Post-render hooks for batch 2 views
   requestAnimationFrame(() => {
     const view = route?.view;
     if (view === 'admin-settings') {
@@ -57,11 +48,9 @@ const _enhancedRenderView = async (route) => {
   });
 };
 
-// Patch window hashchange listeners to use enhanced render
 window.addEventListener('hashchange', () => {
   const route = getCurrentRoute();
   if (route && !['login', 'signup', 'forgot-password', 'reset-password'].includes(route.view)) {
-    // Post-render hooks
     setTimeout(() => {
       if (_notificationsInitialized) initNotifications();
       if (route.view === 'admin-settings') initSettingsView();
@@ -71,9 +60,6 @@ window.addEventListener('hashchange', () => {
 });
 
 // ── Override admin-settings view ────────────────────────────────────────────
-
-// We override the placeholder by hooking into the view render cycle.
-// When admin-settings route is detected, we replace the content.
 
 const _checkAndOverrideSettings = () => {
   const route = getCurrentRoute();
@@ -88,19 +74,16 @@ const _checkAndOverrideSettings = () => {
   }
 };
 
-// Check after each navigation
 window.addEventListener('hashchange', () => setTimeout(_checkAndOverrideSettings, 300));
-// Also check on initial load
 setTimeout(_checkAndOverrideSettings, 1000);
 
-// ── Override admin-analytics with enhanced version (adds reports link) ───────
+// ── Override admin-analytics with enhanced version ───────────────────────────
 
 const _checkAndEnhanceAnalytics = () => {
   const route = getCurrentRoute();
   if (route?.view === 'admin-analytics') {
     const container = document.getElementById('view-container');
     if (container) {
-      // Add reports button if not already there
       const h1 = container.querySelector('h1');
       if (h1 && !container.querySelector('#reports-link')) {
         const link = document.createElement('a');
@@ -118,7 +101,6 @@ window.addEventListener('hashchange', () => setTimeout(_checkAndEnhanceAnalytics
 
 // ── Handle /reports route ───────────────────────────────────────────────────
 
-// Since /reports isn't in the original router, we handle it manually
 window.addEventListener('hashchange', async () => {
   const hash = window.location.hash.replace('#', '') || '/dashboard';
   if (hash === '/reports') {
@@ -147,7 +129,6 @@ function injectBulkImportButton() {
   const h1 = container.querySelector('h1');
   if (!h1 || container.querySelector('#bulk-import-btn')) return;
 
-  // Find the existing "Invite User" button area
   const actionArea = h1.parentElement;
   if (!actionArea) return;
 
@@ -160,7 +141,6 @@ function injectBulkImportButton() {
   btn.textContent = '📄 Bulk Import CSV';
   btn.onclick = () => window._showBulkImport(companyId);
 
-  // Insert after existing buttons
   const existingBtn = actionArea.querySelector('button');
   if (existingBtn) {
     existingBtn.parentElement.insertBefore(btn, existingBtn.nextSibling);
@@ -171,18 +151,12 @@ function injectBulkImportButton() {
 
 // ── Add Reports to Sidebar ──────────────────────────────────────────────────
 
-// We inject a "Reports" link by watching for sidebar renders
 const _injectReportsSidebarItem = () => {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
-
-  // Only for bid_manager+
   if (!hasRoleLevel('bid_manager')) return;
-
-  // Check if already injected
   if (sidebar.querySelector('[href="#/reports"]')) return;
 
-  // Find the leaderboard link to insert after
   const leaderboardLink = sidebar.querySelector('[href="#/leaderboard"]');
   if (leaderboardLink) {
     const reportLink = document.createElement('a');
@@ -194,11 +168,7 @@ const _injectReportsSidebarItem = () => {
   }
 };
 
-// Run after every navigation
 window.addEventListener('hashchange', () => setTimeout(_injectReportsSidebarItem, 300));
 setTimeout(_injectReportsSidebarItem, 1500);
 
-// ============================================================================
-
-console.log('[TenderFlow] Batch 2 wiring loaded — notifications, settings, reports, import connected');
 import './batch3-wiring.js';
