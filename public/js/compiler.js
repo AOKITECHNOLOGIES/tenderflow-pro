@@ -396,7 +396,7 @@ export async function compileAndDownload(tender, tasks) {
         alignment: AlignmentType.LEFT,
         spacing: { before: 400, after: 400 },
       }));
-    } catch (_) { /* skip if logo fetch fails */ }
+    } catch (e) { console.warn('[Logo] Failed to fetch logo:', e.message); }
   }
 
   // ── Cover title ───────────────────────────────────────────────────────────
