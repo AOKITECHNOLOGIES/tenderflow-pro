@@ -9,7 +9,7 @@ import { supabase, getCurrentUser, getCurrentProfile } from './supabase-client.j
 let _currentProfile = null;
 let _authListeners = [];
 let _sessionInitialized = false;
-let _initialSessionTimer = null; // Prevents INITIAL_SESSION + SIGNED_IN double-fire
+let _initialSessionTimer = null;
 
 export function getProfile() {
   return _currentProfile;
@@ -26,7 +26,7 @@ let _lastSignedInAt = 0;
 function _notifyListeners(event, profile) {
   if (event === 'SIGNED_IN') {
     const now = Date.now();
-    if (now - _lastSignedInAt < 2000) return; // Ignore if fired within 2 seconds
+    if (now - _lastSignedInAt < 2000) return;
     _lastSignedInAt = now;
   }
   _authListeners.forEach((cb) => cb(event, profile));
@@ -35,18 +35,11 @@ function _notifyListeners(event, profile) {
 // ── Initialize Auth Listener ─────────────────────────────────────────────────
 export function initAuth() {
   supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log('[Auth] INITIAL_SESSION timer fired, _sessionInitialized:', _sessionInitialized);
 
     if (event === 'INITIAL_SESSION') {
-      // Supabase fires INITIAL_SESSION on every page load.
-      // On a FRESH LOGIN, it fires INITIAL_SESSION (no session) then SIGNED_IN.
-      // On a PAGE REFRESH, it fires INITIAL_SESSION (with session) and nothing after.
-      // So: if we have a session, wait 200ms — if SIGNED_IN doesn't fire, handle it here.
       if (session) {
         _initialSessionTimer = setTimeout(async () => {
-  
-          // SIGNED_IN did not follow — this is a page refresh, handle it ourselves
-          if (_sessionInitialized) return; // SIGNED_IN already handled it
+          if (_sessionInitialized) return;
 
           _currentProfile = await getCurrentProfile();
           _sessionInitialized = true;
@@ -69,18 +62,15 @@ export function initAuth() {
           _notifyListeners('SIGNED_IN', _currentProfile);
         }, 200);
       } else {
-        // No session on load — show login
         _notifyListeners('SIGNED_OUT', null);
       }
 
     } else if (event === 'SIGNED_IN') {
-      // Cancel the INITIAL_SESSION timer — we'll handle it here
       if (_initialSessionTimer) {
         clearTimeout(_initialSessionTimer);
         _initialSessionTimer = null;
       }
 
-      // Prevent double-fire
       if (_sessionInitialized && _currentProfile) return;
 
       _currentProfile = await getCurrentProfile();
@@ -101,7 +91,6 @@ export function initAuth() {
         return;
       }
 
-      // Update last_seen
       if (_currentProfile) {
         supabase
           .from('profiles')
@@ -113,7 +102,6 @@ export function initAuth() {
       _notifyListeners('SIGNED_IN', _currentProfile);
 
     } else if (event === 'TOKEN_REFRESHED') {
-      // Silently update profile — don't re-trigger SIGNED_IN
       _currentProfile = await getCurrentProfile();
 
     } else if (event === 'SIGNED_OUT') {
@@ -139,7 +127,6 @@ export async function login(email, password) {
     return { success: false, error: error.message };
   }
 
-  // Log audit event
   const profile = await getCurrentProfile();
   if (profile) {
     await supabase.from('system_audit').insert({
@@ -190,14 +177,10 @@ export async function signup(email, password, fullName, companySlug = null) {
 
   if (companyId && data.user) {
     await new Promise((r) => setTimeout(r, 500));
-    const { error: updateError } = await supabase
+    await supabase
       .from('profiles')
       .update({ company_id: companyId })
       .eq('id', data.user.id);
-
-    if (updateError) {
-      console.error('[Auth] Company assignment failed:', updateError.message);
-    }
   }
 
   return {
@@ -212,7 +195,6 @@ export async function logout() {
   const { error } = await supabase.auth.signOut();
   _currentProfile = null;
   _sessionInitialized = false;
-  if (error) console.error('[Auth] Logout error:', error.message);
   return !error;
 }
 
@@ -289,8 +271,6 @@ export async function syncDraftsToServer() {
   const unsynced = Object.entries(drafts).filter(([_, d]) => !d.synced);
   if (unsynced.length === 0) return;
 
-  console.log(`[Sync] Syncing ${unsynced.length} drafts...`);
-
   for (const [taskId, draft] of unsynced) {
     const { error } = await supabase
       .from('tasks')
@@ -300,15 +280,12 @@ export async function syncDraftsToServer() {
 
     if (!error) {
       drafts[taskId].synced = true;
-    } else {
-      console.error(`[Sync] Failed: ${taskId}`, error.message);
     }
   }
 
   localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
 }
 
-// Listen for SW sync trigger
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data?.type === 'TRIGGER_DRAFT_SYNC') {
