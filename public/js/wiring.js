@@ -578,3 +578,7 @@ function initToastSystem() {
 
 // ── Global init ───────────────────────────────────────────────────────────────
 initToastSystem();
+
+// Expose attachDynamicHandlers globally so app-shell can call it
+// after every renderView/refreshView without a dynamic import
+window._attachDynamicHandlers = attachDynamicHandlers;
