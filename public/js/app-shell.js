@@ -858,8 +858,9 @@ const views = {
                 class="w-full text-sm text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-brand-500/20 file:text-brand-400 hover:file:bg-brand-500/30" />
             </div>
           </div>
-          <div class="flex gap-3 mt-5">
-            <button onclick="window._confirmKBUpload()" class="flex-1 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition">Upload</button>
+          <p id="kb-upload-status" class="text-xs text-slate-500 min-h-4 mt-3 text-center"></p>
+          <div class="flex gap-3 mt-2">
+            <button id="kb-upload-confirm-btn" onclick="window._confirmKBUpload()" class="flex-1 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition">Upload & Extract</button>
             <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 border border-slate-600/50 text-slate-300 text-sm rounded-lg hover:bg-slate-700/20 transition">Cancel</button>
           </div>
         </div>`;
@@ -881,20 +882,52 @@ const views = {
       }
     };
 
-    window._confirmKBUpload = () => {
+    window._confirmKBUpload = async () => {
       const input = document.getElementById('kb-upload-input');
       const files = input?.files;
       if (!files || files.length === 0) { window.TF?.toast?.('Please select at least one file', 'warning'); return; }
-      window._uploadKBDocs(files, window._selectedKBCategory || 'company');
-      document.querySelector('.fixed.inset-0')?.remove();
-      window.TF?.toast?.(`${files.length} file(s) uploaded to ${window._selectedKBCategory === 'tender' ? 'Past Tenders' : 'Company Documents'}`, 'success');
+
+      // Show processing state on the button
+      const btn = document.getElementById('kb-upload-confirm-btn');
+      const statusEl = document.getElementById('kb-upload-status');
+      if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+
+      const category = window._selectedKBCategory || 'company';
+      const categoryLabel = category === 'tender' ? 'Past Tenders' : 'Company Documents';
+
+      const { successCount, failCount } = await window._uploadKBDocs(files, category, (msg) => {
+        if (statusEl) statusEl.textContent = msg;
+      });
+
+      document.querySelector('.fixed.inset-0.z-50')?.remove();
+
+      if (failCount === 0) {
+        window.TF?.toast?.(`${successCount} file(s) processed and added to ${categoryLabel}`, 'success');
+      } else {
+        window.TF?.toast?.(`${successCount} uploaded, ${failCount} failed — check console for details`, 'warning');
+      }
     };
 
     function docRow(d) {
+      const hasText = d.extractedText && d.extractedText.length > 20;
+      const wordCount = hasText ? Math.round(d.extractedText.split(/\s+/).length).toLocaleString() : 0;
+      const statusBadge = hasText
+        ? `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            AI-readable · ~${wordCount} words
+           </span>`
+        : `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20" title="${d.extractionNote || 'No text extracted'}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Not readable by AI
+           </span>`;
       return `<div class="flex items-center justify-between p-3 bg-surface-700/60 rounded-lg">
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1">
           <p class="text-white text-sm font-medium truncate">${d.name}</p>
-          <p class="text-slate-400 text-xs">${(d.size/1024).toFixed(1)} KB · ${new Date(d.uploadedAt).toLocaleDateString()}</p>
+          <div class="flex items-center gap-2 mt-1">
+            <p class="text-slate-500 text-xs">${(d.size/1024).toFixed(1)} KB · ${new Date(d.uploadedAt).toLocaleDateString()}</p>
+            ${statusBadge}
+          </div>
+          ${!hasText && d.extractionNote ? `<p class="text-slate-600 text-[10px] mt-0.5 truncate" title="${d.extractionNote}">${d.extractionNote}</p>` : ''}
         </div>
         <button onclick="window._deleteKBDoc(${d.id})" class="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10 transition ml-3 shrink-0">Delete</button>
       </div>`;
