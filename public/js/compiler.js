@@ -4,6 +4,186 @@
 
 import { supabase } from './supabase-client.js';
 import { getProfile } from './auth.js';
+export async function compileAndDownload(tender, tasks) {
+  const profile = getProfile();
+  const companyName = tender.companies?.name || profile?.companies?.name || 'Company';
+
+  const sortedTasks = [...(tasks || [])].sort((a, b) => {
+    const ai = SECTION_ORDER.indexOf(a.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(a.section_type);
+    const bi = SECTION_ORDER.indexOf(b.section_type) === -1 ? 99 : SECTION_ORDER.indexOf(b.section_type);
+    return ai - bi;
+  });
+
+  const compiledSections = sortedTasks
+    .filter(t => t.status === 'approved' || t.content)
+    .map(t => ({
+      title: t.title,
+      section_type: t.section_type,
+      content: t.content || '[No content provided]',
+      author: t.profiles?.full_name || 'Unknown',
+      department: t.profiles?.department || 'General',
+      status: t.status,
+      is_mandatory: t.is_mandatory,
+    }));
+
+  // Strip HTML tags from content for Word
+  function stripHtml(html) {
+    return (html || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<li>/gi, '• ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&quot;/g, '"')
+      .trim();
+  }
+
+  const children = [];
+
+  // Cover page
+  children.push(
+    new Paragraph({
+      text: tender.title,
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 2000, after: 400 },
+    }),
+    new Paragraph({
+      text: 'Tender Proposal',
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+      run: { size: 28, color: '64748b' },
+    }),
+  );
+
+  if (tender.reference_number) {
+    children.push(new Paragraph({
+      text: `Reference: ${tender.reference_number}`,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+    }));
+  }
+  if (tender.issuing_authority) {
+    children.push(new Paragraph({
+      text: `Issued by: ${tender.issuing_authority}`,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+    }));
+  }
+  children.push(
+    new Paragraph({
+      text: `Submitted by: ${companyName}`,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+    }),
+    new Paragraph({
+      text: `Date: ${new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+    }),
+  );
+
+  if (tender.deadline) {
+    children.push(new Paragraph({
+      text: `Deadline: ${new Date(tender.deadline).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    }));
+  }
+
+  // Page break before TOC
+  children.push(new Paragraph({ children: [new PageBreak()] }));
+
+  // Table of Contents heading
+  children.push(new Paragraph({
+    text: 'Table of Contents',
+    heading: HeadingLevel.HEADING_1,
+    spacing: { before: 400, after: 300 },
+  }));
+
+  compiledSections.forEach((section, i) => {
+    children.push(new Paragraph({
+      children: [
+        new TextRun({ text: `${i + 1}. ${section.title}`, size: 22 }),
+        new TextRun({ text: section.is_mandatory ? '  [MANDATORY]' : '', color: 'dc2626', size: 20 }),
+      ],
+      spacing: { after: 120 },
+    }));
+  });
+
+  // Page break before content
+  children.push(new Paragraph({ children: [new PageBreak()] }));
+
+  // Sections
+  compiledSections.forEach((section, i) => {
+    children.push(
+      new Paragraph({
+        text: `${i + 1}. ${section.title}`,
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 400, after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text: `Author: ${section.author}`, color: '94a3b8', size: 18 }),
+          new TextRun({ text: `  |  Dept: ${section.department}`, color: '94a3b8', size: 18 }),
+          section.is_mandatory ? new TextRun({ text: '  |  MANDATORY', color: 'dc2626', bold: true, size: 18 }) : new TextRun(''),
+        ],
+        spacing: { after: 200 },
+      }),
+    );
+
+    // Split content into paragraphs
+    const plainText = stripHtml(section.content);
+    const paragraphs = plainText.split('\n').filter(p => p.trim());
+    paragraphs.forEach(para => {
+      children.push(new Paragraph({
+        text: para.trim(),
+        spacing: { after: 160 },
+      }));
+    });
+
+    // Section divider
+    children.push(new Paragraph({ spacing: { after: 300 } }));
+  });
+
+  // Footer
+  children.push(
+    new Paragraph({ children: [new PageBreak()] }),
+    new Paragraph({
+      text: `This document was compiled by TenderFlow Pro on ${new Date().toLocaleDateString()} by ${profile?.full_name || 'Unknown'}. Contains ${compiledSections.length} sections.`,
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 400 },
+      run: { color: '94a3b8', size: 18 },
+    }),
+    new Paragraph({
+      text: `© ${new Date().getFullYear()} ${companyName}. Confidential.`,
+      alignment: AlignmentType.CENTER,
+      run: { color: '94a3b8', size: 18 },
+    }),
+  );
+
+  const doc = new Document({
+    sections: [{ children }],
+    title: tender.title,
+    subject: 'Tender Proposal',
+    creator: profile?.full_name || 'TenderFlow Pro',
+    company: companyName,
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (tender.title || 'tender').replace(/[^a-z0-9]/gi, '-').toLowerCase() + '-proposal.docx';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 const SECTION_ORDER = [
   'executive_summary', 'company_profile', 'project_approach', 'methodology',
