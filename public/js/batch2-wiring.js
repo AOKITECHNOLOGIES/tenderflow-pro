@@ -201,3 +201,4 @@ setTimeout(_injectReportsSidebarItem, 1500);
 // ============================================================================
 
 console.log('[TenderFlow] Batch 2 wiring loaded — notifications, settings, reports, import connected');
+import './batch3-wiring.js';
