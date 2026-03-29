@@ -7,7 +7,7 @@ import { getProfile } from './auth.js';
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
   PageBreak, Header, Footer, Table, TableRow, TableCell,
-  WidthType, BorderStyle, ImageRun,
+  WidthType, BorderStyle, ImageRun, ExternalHyperlink,
 } from 'https://esm.sh/docx@8.5.0';
 
 const SECTION_ORDER = [
@@ -40,7 +40,7 @@ function stripHtml(html) {
 }
 
 // ── HTML → docx paragraphs (preserves Quill formatting) ─────────────────────
-function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {}) {
+async function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {}) {
   if (!html) return [];
   const paragraphs = [];
 
@@ -59,6 +59,19 @@ function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {}) {
         if (tag === 'u') next.underline = { type: 'single' };
         if (tag === 's' || tag === 'strike') next.strike = true;
         if (tag === 'br') { runs.push(new TextRun({ text: '\n', break: 1, font })); return; }
+        // Hyperlinks — wrap in ExternalHyperlink
+        if (tag === 'a') {
+          const href = node.getAttribute('href');
+          if (href && href.startsWith('http')) {
+            const linkText = node.textContent || href;
+            const linkRun = new ExternalHyperlink({
+              link: href,
+              children: [new TextRun({ text: linkText, style: 'Hyperlink', color: '0284c7', underline: { type: 'single' }, font, ...next })],
+            });
+            runs.push(linkRun);
+            return;
+          }
+        }
         node.childNodes.forEach(child => walk(child, next));
       }
     }
@@ -70,7 +83,7 @@ function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {}) {
   const div = document.createElement('div');
   div.innerHTML = html || '';
 
-  function processNode(node) {
+  async function processNode(node) {
     if (node.nodeType === 3) {
       const text = node.textContent.trim();
       if (text) paragraphs.push(new Paragraph({
@@ -161,9 +174,42 @@ function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {}) {
       return;
     }
 
+    // Inline images from Quill (data URIs or public URLs)
+    if (tag === 'img') {
+      const src = node.getAttribute('src') || '';
+      try {
+        let uint8 = null;
+        let imgType = 'png';
+        if (src.startsWith('data:')) {
+          const commaIdx = src.indexOf(',');
+          const header = src.substring(0, commaIdx);
+          const b64 = src.substring(commaIdx + 1);
+          const binary = atob(b64);
+          uint8 = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) uint8[i] = binary.charCodeAt(i);
+          imgType = header.includes('png') ? 'png' : header.includes('gif') ? 'gif' : 'jpg';
+        } else if (src.startsWith('http')) {
+          const res = await fetch(src);
+          if (res.ok) {
+            const buf = await res.arrayBuffer();
+            uint8 = new Uint8Array(buf);
+            const ct = res.headers.get('content-type') || 'image/jpeg';
+            imgType = ct.includes('png') ? 'png' : ct.includes('gif') ? 'gif' : 'jpg';
+          }
+        }
+        if (uint8) {
+          paragraphs.push(new Paragraph({
+            children: [new ImageRun({ data: uint8, transformation: { width: 480, height: 280 }, type: imgType })],
+            spacing: { before: 120, after: 120 },
+          }));
+        }
+      } catch (_) {}
+      return;
+    }
+
     // Blockquote
     if (tag === 'blockquote') {
-      node.childNodes.forEach(child => processNode(child));
+      for (const child of node.childNodes) { await processNode(child); }
       return;
     }
 
@@ -186,10 +232,10 @@ function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {}) {
     }
 
     // Recurse for unknown elements
-    node.childNodes.forEach(child => processNode(child));
+    for (const child of node.childNodes) { await processNode(child); }
   }
 
-  div.childNodes.forEach(node => processNode(node));
+  for (const node of div.childNodes) { await processNode(node); }
 
   return paragraphs.length ? paragraphs : [new Paragraph({
     children: [new TextRun({ text: '', font })],
@@ -512,16 +558,42 @@ export async function compileAndDownload(tender, tasks) {
     return ai - bi;
   });
 
-  const compiledSections = sortedTasks
-    .filter(t => t.status === 'approved' || t.content)
-    .map(t => ({
-      title:        t.title,
-      section_type: t.section_type,
-      content:      t.content || '[No content provided]',
-      author:       t.profiles?.full_name || 'Unknown',
-      department:   t.profiles?.department || 'General',
-      is_mandatory: t.is_mandatory,
-    }));
+  // Fetch task images for all tasks
+  const { data: allTaskImages } = await supabase
+    .from('documents')
+    .select('task_id, file_name, storage_path, metadata, file_type')
+    .eq('tender_id', tender.id)
+    .eq('doc_type', 'task_image');
+
+  const compiledSections = await Promise.all(
+    sortedTasks
+      .filter(t => t.status === 'approved' || t.content)
+      .map(async t => {
+        // Fetch image bytes for each task image
+        const taskImgDocs = (allTaskImages || []).filter(img => img.task_id === t.id);
+        const images = [];
+        for (const img of taskImgDocs) {
+          try {
+            const { data: blob } = await supabase.storage.from('task-images').download(img.storage_path);
+            if (blob) {
+              const buf = await blob.arrayBuffer();
+              const ct = img.file_type || blob.type || 'image/jpeg';
+              const imgType = ct.includes('png') ? 'png' : ct.includes('gif') ? 'gif' : 'jpg';
+              images.push({ data: new Uint8Array(buf), type: imgType, name: img.file_name });
+            }
+          } catch (_) {}
+        }
+        return {
+          title:        t.title,
+          section_type: t.section_type,
+          content:      t.content || '[No content provided]',
+          author:       t.profiles?.full_name || 'Unknown',
+          department:   t.profiles?.department || 'General',
+          is_mandatory: t.is_mandatory,
+          images,
+        };
+      })
+  );
 
   const children = [];
 
@@ -669,8 +741,28 @@ export async function compileAndDownload(tender, tasks) {
     );
 
     // Convert Quill HTML to properly formatted docx paragraphs
-    const contentParagraphs = htmlToDocxParagraphs(section.content, { font, bodySize, primaryColor });
+    const contentParagraphs = await htmlToDocxParagraphs(section.content, { font, bodySize, primaryColor });
     contentParagraphs.forEach(p => children.push(p));
+
+    // Append task images after content
+    if (section.images?.length) {
+      for (const img of section.images) {
+        try {
+          children.push(new Paragraph({
+            children: [new ImageRun({
+              data: img.data,
+              transformation: { width: 500, height: 300 },
+              type: img.type,
+            })],
+            spacing: { before: 120, after: 120 },
+          }));
+          children.push(new Paragraph({
+            children: [new TextRun({ text: img.name, size: bodySize - 4, color: '94a3b8', italics: true, font })],
+            spacing: { after: 160 },
+          }));
+        } catch (_) {}
+      }
+    }
 
     children.push(new Paragraph({ spacing: { after: 300 } }));
   });
