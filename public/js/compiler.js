@@ -373,16 +373,44 @@ export async function compileAndDownload(tender, tasks) {
   // ── Logo ──────────────────────────────────────────────────────────────────
   if (logoUrl) {
     try {
-      const res       = await fetch(logoUrl);
-      const buf       = await res.arrayBuffer();
-      const uint8     = new Uint8Array(buf);
-      const ct        = res.headers.get('content-type') || 'image/png';
-      const imageType = ct.includes('png') ? 'png' : ct.includes('svg') ? 'svg' : 'jpg';
-      children.push(new Paragraph({
-        children: [new ImageRun({ data: uint8, transformation: { width: 150, height: 60 }, type: imageType })],
-        alignment: AlignmentType.LEFT,
-        spacing: { before: 400, after: 400 },
-      }));
+      let uint8 = null;
+      let imageType = 'png';
+
+      // Try Supabase storage download first (handles auth automatically)
+      const storageMatch = logoUrl.match(/storage\/v1\/object\/(?:public\/|authenticated\/)?([^?]+)/);
+      if (storageMatch) {
+        const storagePath = storageMatch[1];
+        const bucketMatch = storagePath.match(/^([^/]+)\/(.+)$/);
+        if (bucketMatch) {
+          const [, bucket, path] = bucketMatch;
+          const { data: blob, error } = await supabase.storage.from(bucket).download(path);
+          if (!error && blob) {
+            const buf = await blob.arrayBuffer();
+            uint8 = new Uint8Array(buf);
+            const ct = blob.type || 'image/png';
+            imageType = ct.includes('png') ? 'png' : ct.includes('svg') ? 'svg' : 'jpg';
+          }
+        }
+      }
+
+      // Fallback: plain fetch (works for public URLs)
+      if (!uint8) {
+        const res = await fetch(logoUrl);
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          uint8 = new Uint8Array(buf);
+          const ct = res.headers.get('content-type') || 'image/png';
+          imageType = ct.includes('png') ? 'png' : ct.includes('svg') ? 'svg' : 'jpg';
+        }
+      }
+
+      if (uint8) {
+        children.push(new Paragraph({
+          children: [new ImageRun({ data: uint8, transformation: { width: 150, height: 60 }, type: imageType })],
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 400, after: 400 },
+        }));
+      }
     } catch (e) { console.warn('[Logo] Failed to fetch logo:', e.message); }
   }
 
