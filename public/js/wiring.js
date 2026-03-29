@@ -293,6 +293,92 @@ function attachTaskDetailHandlers() {
       window._quillEditor.root.innerHTML = hidden.innerHTML;
     }
 
+    // ── Floating toolbar: pin to top of #main-content when scrolled past ──────
+    const mainContent   = document.getElementById('main-content');
+    const qlToolbarEl   = editorEl.querySelector('.ql-toolbar');
+    const extraToolbar  = document.getElementById('quill-toolbar-extra');
+
+    if (mainContent && qlToolbarEl && extraToolbar) {
+      // Measure the natural top of the Quill toolbar once layout is settled
+      let toolbarNaturalTop = 0;
+      let toolbarWidth      = 0;
+      let toolbarLeft       = 0;
+      let isFloating        = false;
+
+      function measureToolbar() {
+        const rect    = qlToolbarEl.getBoundingClientRect();
+        const mcRect  = mainContent.getBoundingClientRect();
+        toolbarNaturalTop = rect.top + mainContent.scrollTop - mcRect.top;
+        toolbarWidth      = editorEl.offsetWidth;
+        toolbarLeft       = editorEl.getBoundingClientRect().left;
+      }
+
+      function onEditorScroll() {
+        const mcRect      = mainContent.getBoundingClientRect();
+        const editorRect  = editorEl.getBoundingClientRect();
+        const extraRect   = extraToolbar.getBoundingClientRect();
+        const editorBottom = editorRect.bottom;
+        const shouldFloat = extraRect.bottom > mcRect.top + 4 &&
+                            editorBottom > mcRect.top + 120;
+
+        if (shouldFloat && !isFloating) {
+          // Pin both toolbars to the top of the main content area
+          const floatTop  = mcRect.top + 4;
+          const floatLeft = editorEl.getBoundingClientRect().left;
+          const floatW    = editorEl.offsetWidth;
+
+          extraToolbar.style.cssText = `
+            position:fixed; top:${floatTop}px; left:${floatLeft}px;
+            width:${floatW}px; z-index:50;
+            background:#1e3a5f; border:1px solid rgba(56,189,248,0.4);
+            border-radius:8px 8px 0 0; padding:4px 6px;
+            display:flex; gap:4px; flex-wrap:wrap;
+            box-shadow:0 4px 20px rgba(0,0,0,0.4);
+          `;
+          qlToolbarEl.style.cssText = `
+            position:fixed; top:${floatTop + extraToolbar.offsetHeight}px; left:${floatLeft}px;
+            width:${floatW}px; z-index:50;
+            background:#1e3a5f !important;
+            border-color:rgba(56,189,248,0.4) !important;
+            box-shadow:0 4px 20px rgba(0,0,0,0.4);
+          `;
+          // Add spacer so content doesn't jump
+          editorEl.style.marginTop = (extraToolbar.offsetHeight + qlToolbarEl.offsetHeight) + 'px';
+          isFloating = true;
+
+        } else if (!shouldFloat && isFloating) {
+          // Unpin
+          extraToolbar.style.cssText = '';
+          qlToolbarEl.style.cssText  = '';
+          editorEl.style.marginTop   = '';
+          isFloating = false;
+        } else if (isFloating) {
+          // Update position if window resized
+          const floatLeft = editorEl.getBoundingClientRect().left;
+          const floatW    = editorEl.offsetWidth;
+          extraToolbar.style.left  = floatLeft + 'px';
+          extraToolbar.style.width = floatW + 'px';
+          qlToolbarEl.style.left   = floatLeft + 'px';
+          qlToolbarEl.style.width  = floatW + 'px';
+        }
+      }
+
+      setTimeout(measureToolbar, 100);
+      mainContent.addEventListener('scroll', onEditorScroll, { passive: true });
+      window.addEventListener('resize', onEditorScroll, { passive: true });
+
+      // Cleanup on navigation
+      const cleanupFloat = () => {
+        mainContent.removeEventListener('scroll', onEditorScroll);
+        window.removeEventListener('resize', onEditorScroll);
+        extraToolbar.style.cssText = '';
+        if (qlToolbarEl) qlToolbarEl.style.cssText = '';
+        if (editorEl) editorEl.style.marginTop = '';
+        window.removeEventListener('hashchange', cleanupFloat);
+      };
+      window.addEventListener('hashchange', cleanupFloat);
+    }
+
     const toolbar   = editorEl.querySelector('.ql-toolbar');
     const container = editorEl.querySelector('.ql-container');
     if (toolbar) {
