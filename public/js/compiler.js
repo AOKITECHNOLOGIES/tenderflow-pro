@@ -39,6 +39,163 @@ function stripHtml(html) {
     .trim();
 }
 
+// ── HTML → docx paragraphs (preserves Quill formatting) ─────────────────────
+function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {}) {
+  if (!html) return [];
+  const paragraphs = [];
+
+  // Parse inline runs from a single HTML element's innerHTML
+  function parseInlineRuns(el) {
+    const runs = [];
+    function walk(node, state) {
+      if (node.nodeType === 3) { // text node
+        const text = node.textContent.replace(/\u00a0/g, ' ');
+        if (text) runs.push(new TextRun({ text, ...state, font }));
+      } else if (node.nodeType === 1) {
+        const tag = node.tagName?.toLowerCase();
+        const next = { ...state };
+        if (tag === 'strong' || tag === 'b') next.bold = true;
+        if (tag === 'em' || tag === 'i') next.italics = true;
+        if (tag === 'u') next.underline = { type: 'single' };
+        if (tag === 's' || tag === 'strike') next.strike = true;
+        if (tag === 'br') { runs.push(new TextRun({ text: '\n', break: 1, font })); return; }
+        node.childNodes.forEach(child => walk(child, next));
+      }
+    }
+    el.childNodes.forEach(child => walk(child, {}));
+    return runs.length ? runs : [new TextRun({ text: '', font })];
+  }
+
+  // Use a temporary DOM to parse the HTML
+  const div = document.createElement('div');
+  div.innerHTML = html || '';
+
+  function processNode(node) {
+    if (node.nodeType === 3) {
+      const text = node.textContent.trim();
+      if (text) paragraphs.push(new Paragraph({
+        children: [new TextRun({ text, size: bodySize, font })],
+        spacing: { after: 160 },
+      }));
+      return;
+    }
+    if (node.nodeType !== 1) return;
+
+    const tag = node.tagName?.toLowerCase();
+
+    // Headings
+    if (tag === 'h1' || tag === 'h2') {
+      paragraphs.push(new Paragraph({
+        children: [new TextRun({ text: node.textContent, bold: true, size: bodySize + 8, color: primaryColor, font })],
+        spacing: { before: 300, after: 150 },
+      }));
+      return;
+    }
+    if (tag === 'h3' || tag === 'h4') {
+      paragraphs.push(new Paragraph({
+        children: [new TextRun({ text: node.textContent, bold: true, size: bodySize + 2, font })],
+        spacing: { before: 200, after: 120 },
+      }));
+      return;
+    }
+
+    // Tables
+    if (tag === 'table') {
+      const rows = [];
+      node.querySelectorAll('tr').forEach((tr, ri) => {
+        const cells = [];
+        tr.querySelectorAll('td, th').forEach(cell => {
+          const isHeader = cell.tagName?.toLowerCase() === 'th';
+          const cellRuns = parseInlineRuns(cell);
+          if (isHeader) cellRuns.forEach(r => { r.bold = true; });
+          cells.push(new TableCell({
+            borders: {
+              top:    { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
+              left:   { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
+              right:  { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
+            },
+            children: [new Paragraph({ children: cellRuns, spacing: { after: 60 } })],
+            shading: isHeader ? { fill: 'f1f5f9' } : undefined,
+          }));
+        });
+        if (cells.length) rows.push(new TableRow({ children: cells }));
+      });
+      if (rows.length) {
+        paragraphs.push(new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows,
+        }));
+        paragraphs.push(new Paragraph({ spacing: { after: 160 } }));
+      }
+      return;
+    }
+
+    // Ordered list
+    if (tag === 'ol') {
+      let idx = 1;
+      node.querySelectorAll('li').forEach(li => {
+        const runs = parseInlineRuns(li);
+        runs.unshift(new TextRun({ text: `${idx}. `, size: bodySize, font }));
+        paragraphs.push(new Paragraph({
+          children: runs.map(r => ({ ...r, size: r.size || bodySize })),
+          indent: { left: 720 },
+          spacing: { after: 80 },
+        }));
+        idx++;
+      });
+      return;
+    }
+
+    // Unordered list
+    if (tag === 'ul') {
+      node.querySelectorAll('li').forEach(li => {
+        const runs = parseInlineRuns(li);
+        runs.unshift(new TextRun({ text: '• ', size: bodySize, font }));
+        paragraphs.push(new Paragraph({
+          children: runs,
+          indent: { left: 720 },
+          spacing: { after: 80 },
+        }));
+      });
+      return;
+    }
+
+    // Blockquote
+    if (tag === 'blockquote') {
+      node.childNodes.forEach(child => processNode(child));
+      return;
+    }
+
+    // Paragraph / div / default block
+    if (tag === 'p' || tag === 'div') {
+      // Skip empty
+      if (!node.textContent?.trim() && !node.querySelector('img, table, br')) return;
+      const runs = parseInlineRuns(node);
+      const alignAttr = node.getAttribute?.('class') || '';
+      let align = AlignmentType.LEFT;
+      if (alignAttr.includes('ql-align-center')) align = AlignmentType.CENTER;
+      if (alignAttr.includes('ql-align-right'))  align = AlignmentType.RIGHT;
+      if (alignAttr.includes('ql-align-justify')) align = AlignmentType.JUSTIFIED;
+      paragraphs.push(new Paragraph({
+        children: runs,
+        alignment: align,
+        spacing: { after: 160 },
+      }));
+      return;
+    }
+
+    // Recurse for unknown elements
+    node.childNodes.forEach(child => processNode(child));
+  }
+
+  div.childNodes.forEach(node => processNode(node));
+
+  return paragraphs.length ? paragraphs : [new Paragraph({
+    children: [new TextRun({ text: '', font })],
+  })];
+}
+
 export async function compileTender(tenderId) {
   const profile = getProfile();
 
@@ -151,10 +308,8 @@ function generateCompiledHTML({ tender, companyName, logoUrl, sections, generate
       </td>
     </tr>`;
 
-    const contentParagraphs = (section.content || '')
-      .split('\n').filter(p => p.trim())
-      .map(p => `<p style="margin:0 0 10px 0; line-height:1.7; color:#334155;">${p}</p>`)
-      .join('');
+    // Wrap Quill HTML content in a styled container — preserve all inline formatting
+    const rawContent = section.content || '<p style="color:#94a3b8;">No content provided</p>';
 
     sectionsHTML += `<div id="${sectionId}" style="page-break-inside:avoid; margin-bottom:40px;">
       <h2 style="font-size:18px; color:#0f172a; border-bottom:2px solid #0ea5e9; padding-bottom:8px; margin-bottom:16px;">
@@ -164,7 +319,7 @@ function generateCompiledHTML({ tender, companyName, logoUrl, sections, generate
         Section: ${sectionLabel} &nbsp;|&nbsp; Author: ${section.author} &nbsp;|&nbsp; Dept: ${section.department}
         ${section.is_mandatory ? '&nbsp;|&nbsp; <strong style="color:#dc2626;">MANDATORY</strong>' : ''}
       </p>
-      ${contentParagraphs}
+      <div style="font-size:14px; line-height:1.8; color:#334155;">${rawContent}</div>
     </div>`;
   }
 
@@ -513,13 +668,9 @@ export async function compileAndDownload(tender, tasks) {
       }),
     );
 
-    const plainText = stripHtml(section.content);
-    plainText.split('\n').filter(p => p.trim()).forEach(para => {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: para.trim(), size: bodySize, font })],
-        spacing: { after: 160 },
-      }));
-    });
+    // Convert Quill HTML to properly formatted docx paragraphs
+    const contentParagraphs = htmlToDocxParagraphs(section.content, { font, bodySize, primaryColor });
+    contentParagraphs.forEach(p => children.push(p));
 
     children.push(new Paragraph({ spacing: { after: 300 } }));
   });
