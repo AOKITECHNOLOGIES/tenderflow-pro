@@ -515,16 +515,14 @@ const views = {
         </div>
         <div class="p-5">
           ${canEdit ? `
-            <div id="quill-sticky-wrap" style="position:sticky; top:0; z-index:40; background:#0f172a; border-radius:10px 10px 0 0; padding-top:4px;">
-              <div id="quill-toolbar-extra" class="flex gap-1 pb-2 px-1">
-                <button type="button" title="Insert Table" onclick="window._insertTable()" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-300 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-                  Insert Table
-                </button>
-                <button type="button" title="Add Row Below" onclick="window._tableAddRow()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Row</button>
-                <button type="button" title="Add Column Right" onclick="window._tableAddCol()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Col</button>
-                <button type="button" title="Delete Table" onclick="window._tableDelete()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-red-500/10 transition">✕ Table</button>
-              </div>
+            <div id="quill-toolbar-extra" class="flex gap-1 mb-1">
+              <button type="button" title="Insert Table" onclick="window._insertTable()" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-300 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+                Insert Table
+              </button>
+              <button type="button" title="Add Row Below" onclick="window._tableAddRow()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Row</button>
+              <button type="button" title="Add Column Right" onclick="window._tableAddCol()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Col</button>
+              <button type="button" title="Delete Table" onclick="window._tableDelete()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-red-500/10 transition">✕ Table</button>
             </div>
             <div id="quill-editor" style="min-height:360px; background:#1a2540; color:#f1f5f9; border-radius:0 0 8px 8px; border:2px solid rgba(56,189,248,0.35);"></div>
             <div id="task-content-hidden" style="display:none">${draft?.content || task.content || ''}</div>
