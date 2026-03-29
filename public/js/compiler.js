@@ -43,35 +43,36 @@ function stripHtml(html) {
 async function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {}) {
   if (!html) return [];
   const paragraphs = [];
+  const sz = bodySize || 20;
 
-  // Parse inline runs from a single HTML element's innerHTML
+  // ── Inline run parser — handles bold/italic/underline/strike/links ──────────
   function parseInlineRuns(el) {
     const runs = [];
     function walk(node, state) {
-      if (node.nodeType === 3) { // text node
-        const text = node.textContent.replace(/\u00a0/g, ' ');
-        if (text) runs.push(new TextRun({ text, ...state, font }));
+      if (node.nodeType === 3) {
+        const text = node.textContent.replace(/ /g, ' ');
+        if (text) runs.push(new TextRun({ text, size: sz, font, ...state }));
       } else if (node.nodeType === 1) {
-        const tag = node.tagName?.toLowerCase();
+        const tag = node.tagName.toLowerCase();
         const next = { ...state };
         if (tag === 'strong' || tag === 'b') next.bold = true;
         if (tag === 'em' || tag === 'i') next.italics = true;
         if (tag === 'u') next.underline = { type: 'single' };
         if (tag === 's' || tag === 'strike') next.strike = true;
-        if (tag === 'br') { runs.push(new TextRun({ text: '\n', break: 1, font })); return; }
-        // Hyperlinks — wrap in ExternalHyperlink
+        if (tag === 'br') { runs.push(new TextRun({ break: 1, font })); return; }
         if (tag === 'a') {
           const href = node.getAttribute('href');
-          if (href && href.startsWith('http')) {
-            const linkText = node.textContent || href;
-            const linkRun = new ExternalHyperlink({
+          if (href && (href.startsWith('http') || href.startsWith('mailto'))) {
+            runs.push(new ExternalHyperlink({
               link: href,
-              children: [new TextRun({ text: linkText, style: 'Hyperlink', color: '0284c7', underline: { type: 'single' }, font, ...next })],
-            });
-            runs.push(linkRun);
+              children: [new TextRun({ text: node.textContent || href, size: sz, font, color: '0284c7', underline: { type: 'single' }, ...next })],
+            }));
             return;
           }
         }
+        // Skip block-level children — they're handled by processNode
+        const blockTags = new Set(['p','div','h1','h2','h3','h4','ul','ol','li','table','blockquote']);
+        if (blockTags.has(tag)) return;
         node.childNodes.forEach(child => walk(child, next));
       }
     }
@@ -79,170 +80,148 @@ async function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {})
     return runs.length ? runs : [new TextRun({ text: '', font })];
   }
 
-  // Use a temporary DOM to parse the HTML
+  // ── Block node processor ────────────────────────────────────────────────────
   const div = document.createElement('div');
   div.innerHTML = html || '';
 
   async function processNode(node) {
     if (node.nodeType === 3) {
-      const text = node.textContent.trim();
-      if (text) paragraphs.push(new Paragraph({
-        children: [new TextRun({ text, size: bodySize, font })],
-        spacing: { after: 160 },
-      }));
+      const text = node.textContent.replace(/ /g, ' ').trim();
+      if (text) paragraphs.push(new Paragraph({ children: [new TextRun({ text, size: sz, font })], spacing: { after: 160 } }));
       return;
     }
     if (node.nodeType !== 1) return;
 
-    const tag = node.tagName?.toLowerCase();
+    const tag = node.tagName.toLowerCase();
 
-    // Headings
-    if (tag === 'h1' || tag === 'h2') {
-      paragraphs.push(new Paragraph({
-        children: [new TextRun({ text: node.textContent, bold: true, size: bodySize + 8, color: primaryColor, font })],
-        spacing: { before: 300, after: 150 },
-      }));
+    // ── Headings ──
+    if (tag === 'h1') {
+      paragraphs.push(new Paragraph({ children: [new TextRun({ text: node.textContent.trim(), bold: true, size: sz + 14, color: primaryColor, font })], spacing: { before: 360, after: 160 } }));
       return;
     }
-    if (tag === 'h3' || tag === 'h4') {
-      paragraphs.push(new Paragraph({
-        children: [new TextRun({ text: node.textContent, bold: true, size: bodySize + 2, font })],
-        spacing: { before: 200, after: 120 },
-      }));
+    if (tag === 'h2') {
+      paragraphs.push(new Paragraph({ children: [new TextRun({ text: node.textContent.trim(), bold: true, size: sz + 10, color: primaryColor, font })], spacing: { before: 280, after: 120 } }));
+      return;
+    }
+    if (tag === 'h3') {
+      paragraphs.push(new Paragraph({ children: [new TextRun({ text: node.textContent.trim(), bold: true, size: sz + 4, font })], spacing: { before: 200, after: 100 } }));
+      return;
+    }
+    if (tag === 'h4' || tag === 'h5' || tag === 'h6') {
+      paragraphs.push(new Paragraph({ children: [new TextRun({ text: node.textContent.trim(), bold: true, size: sz + 2, font })], spacing: { before: 160, after: 80 } }));
       return;
     }
 
-    // Tables
+    // ── Unordered list ──
+    if (tag === 'ul') {
+      for (const li of node.querySelectorAll(':scope > li')) {
+        const runs = parseInlineRuns(li);
+        runs.unshift(new TextRun({ text: '•  ', size: sz, font }));
+        paragraphs.push(new Paragraph({ children: runs, indent: { left: 720, hanging: 360 }, spacing: { after: 80 } }));
+      }
+      paragraphs.push(new Paragraph({ spacing: { after: 80 } }));
+      return;
+    }
+
+    // ── Ordered list ──
+    if (tag === 'ol') {
+      let idx = 1;
+      for (const li of node.querySelectorAll(':scope > li')) {
+        const runs = parseInlineRuns(li);
+        runs.unshift(new TextRun({ text: `${idx}.  `, size: sz, font }));
+        paragraphs.push(new Paragraph({ children: runs, indent: { left: 720, hanging: 360 }, spacing: { after: 80 } }));
+        idx++;
+      }
+      paragraphs.push(new Paragraph({ spacing: { after: 80 } }));
+      return;
+    }
+
+    // ── Table ──
     if (tag === 'table') {
       const rows = [];
-      node.querySelectorAll('tr').forEach((tr, ri) => {
+      for (const tr of node.querySelectorAll('tr')) {
         const cells = [];
-        tr.querySelectorAll('td, th').forEach(cell => {
-          const isHeader = cell.tagName?.toLowerCase() === 'th';
+        const cellEls = tr.querySelectorAll('td, th');
+        const colCount = cellEls.length || 1;
+        const cellWidth = Math.floor(9026 / colCount);
+        for (const cell of cellEls) {
+          const isHeader = cell.tagName.toLowerCase() === 'th';
           const cellRuns = parseInlineRuns(cell);
-          if (isHeader) cellRuns.forEach(r => { r.bold = true; });
-          // Distribute columns evenly across page width
-          const colCount = tr.querySelectorAll('td, th').length || 1;
-          const cellWidth = Math.floor(9026 / colCount);
           cells.push(new TableCell({
             width: { size: cellWidth, type: WidthType.DXA },
             borders: {
-              top:    { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
-              bottom: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
-              left:   { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
-              right:  { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
+              top:    { style: BorderStyle.SINGLE, size: 4, color: 'cbd5e1' },
+              bottom: { style: BorderStyle.SINGLE, size: 4, color: 'cbd5e1' },
+              left:   { style: BorderStyle.SINGLE, size: 4, color: 'cbd5e1' },
+              right:  { style: BorderStyle.SINGLE, size: 4, color: 'cbd5e1' },
             },
-            children: [new Paragraph({ children: cellRuns, spacing: { before: 60, after: 60 } })],
             shading: isHeader ? { fill: 'f1f5f9' } : undefined,
+            children: [new Paragraph({
+              children: isHeader ? cellRuns.map(r => r instanceof TextRun ? new TextRun({ ...r, bold: true }) : r) : cellRuns,
+              spacing: { before: 80, after: 80 },
+            })],
           }));
-        });
+        }
         if (cells.length) rows.push(new TableRow({ children: cells }));
-      });
+      }
       if (rows.length) {
-        paragraphs.push(new Table({
-          width: { size: 9026, type: WidthType.DXA },
-          rows,
-        }));
-        paragraphs.push(new Paragraph({ spacing: { after: 160 } }));
+        paragraphs.push(new Table({ width: { size: 9026, type: WidthType.DXA }, rows }));
+        paragraphs.push(new Paragraph({ spacing: { after: 200 } }));
       }
       return;
     }
 
-    // Ordered list
-    if (tag === 'ol') {
-      let idx = 1;
-      node.querySelectorAll('li').forEach(li => {
-        const runs = parseInlineRuns(li);
-        runs.unshift(new TextRun({ text: `${idx}. `, size: bodySize, font }));
-        paragraphs.push(new Paragraph({
-          children: runs.map(r => ({ ...r, size: r.size || bodySize })),
-          indent: { left: 720 },
-          spacing: { after: 80 },
-        }));
-        idx++;
-      });
-      return;
-    }
-
-    // Unordered list
-    if (tag === 'ul') {
-      node.querySelectorAll('li').forEach(li => {
-        const runs = parseInlineRuns(li);
-        runs.unshift(new TextRun({ text: '• ', size: bodySize, font }));
-        paragraphs.push(new Paragraph({
-          children: runs,
-          indent: { left: 720 },
-          spacing: { after: 80 },
-        }));
-      });
-      return;
-    }
-
-    // Inline images from Quill (data URIs or public URLs)
+    // ── Inline image ──
     if (tag === 'img') {
       const src = node.getAttribute('src') || '';
       try {
-        let uint8 = null;
-        let imgType = 'png';
+        let uint8 = null; let imgType = 'png';
         if (src.startsWith('data:')) {
-          const commaIdx = src.indexOf(',');
-          const header = src.substring(0, commaIdx);
-          const b64 = src.substring(commaIdx + 1);
-          const binary = atob(b64);
-          uint8 = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) uint8[i] = binary.charCodeAt(i);
-          imgType = header.includes('png') ? 'png' : header.includes('gif') ? 'gif' : 'jpg';
+          const ci = src.indexOf(',');
+          const hdr = src.substring(0, ci);
+          const bin = atob(src.substring(ci + 1));
+          uint8 = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) uint8[i] = bin.charCodeAt(i);
+          imgType = hdr.includes('png') ? 'png' : hdr.includes('gif') ? 'gif' : 'jpg';
         } else if (src.startsWith('http')) {
           const res = await fetch(src);
-          if (res.ok) {
-            const buf = await res.arrayBuffer();
-            uint8 = new Uint8Array(buf);
-            const ct = res.headers.get('content-type') || 'image/jpeg';
-            imgType = ct.includes('png') ? 'png' : ct.includes('gif') ? 'gif' : 'jpg';
-          }
+          if (res.ok) { const buf = await res.arrayBuffer(); uint8 = new Uint8Array(buf); const ct = res.headers.get('content-type') || ''; imgType = ct.includes('png') ? 'png' : ct.includes('gif') ? 'gif' : 'jpg'; }
         }
-        if (uint8) {
-          paragraphs.push(new Paragraph({
-            children: [new ImageRun({ data: uint8, transformation: { width: 480, height: 280 }, type: imgType })],
-            spacing: { before: 120, after: 120 },
-          }));
-        }
+        if (uint8) paragraphs.push(new Paragraph({ children: [new ImageRun({ data: uint8, transformation: { width: 480, height: 300 }, type: imgType })], spacing: { before: 120, after: 120 } }));
       } catch (_) {}
       return;
     }
 
-    // Blockquote
-    if (tag === 'blockquote') {
-      for (const child of node.childNodes) { await processNode(child); }
-      return;
-    }
-
-    // Paragraph / div / default block
-    if (tag === 'p' || tag === 'div') {
-      // Skip empty
-      if (!node.textContent?.trim() && !node.querySelector('img, table, br')) return;
-      const runs = parseInlineRuns(node);
-      const alignAttr = node.getAttribute?.('class') || '';
+    // ── Paragraph ──
+    if (tag === 'p') {
+      // Check if it contains block children — if so recurse instead
+      const hasBlock = Array.from(node.children).some(c => ['ul','ol','table','blockquote'].includes(c.tagName?.toLowerCase()));
+      if (hasBlock) { for (const child of node.childNodes) await processNode(child); return; }
+      const text = node.textContent.replace(/ /g, ' ');
+      if (!text.trim() && !node.querySelector('img')) { paragraphs.push(new Paragraph({ spacing: { after: 80 } })); return; }
+      const cls = node.getAttribute('class') || '';
       let align = AlignmentType.LEFT;
-      if (alignAttr.includes('ql-align-center')) align = AlignmentType.CENTER;
-      if (alignAttr.includes('ql-align-right'))  align = AlignmentType.RIGHT;
-      if (alignAttr.includes('ql-align-justify')) align = AlignmentType.JUSTIFIED;
-      paragraphs.push(new Paragraph({
-        children: runs,
-        alignment: align,
-        spacing: { after: 160 },
-      }));
+      if (cls.includes('ql-align-center')) align = AlignmentType.CENTER;
+      if (cls.includes('ql-align-right'))  align = AlignmentType.RIGHT;
+      if (cls.includes('ql-align-justify')) align = AlignmentType.JUSTIFIED;
+      const runs = parseInlineRuns(node);
+      paragraphs.push(new Paragraph({ children: runs, alignment: align, spacing: { after: 160 } }));
       return;
     }
 
-    // Recurse for unknown elements
-    for (const child of node.childNodes) { await processNode(child); }
+    // ── Blockquote ──
+    if (tag === 'blockquote') {
+      for (const child of node.childNodes) await processNode(child);
+      return;
+    }
+
+    // ── div / span / other — recurse ──
+    for (const child of node.childNodes) await processNode(child);
   }
 
-  for (const node of div.childNodes) { await processNode(node); }
+  for (const node of div.childNodes) await processNode(node);
 
-  return paragraphs.length ? paragraphs : [new Paragraph({
-    children: [new TextRun({ text: '', font })],
+  return paragraphs.length ? paragraphs : [new Paragraph({ children: [new TextRun({ text: '', font })],
   })];
 }
 
@@ -542,6 +521,7 @@ export async function compileAndDownload(tender, tasks) {
   const secondaryColor = (b.secondary_color || '#0f172a').replace('#', '');
   const logoUrl        = b.logo_url || tender.companies?.logo_url || null;
   const proposalHeader = b.proposal_header || '';
+  const tagline        = b.tagline || '';
   const proposalFooter = b.proposal_footer || `© ${new Date().getFullYear()} ${companyName}. Confidential.`;
   const coverTemplate  = b.cover_template || 'default';
   const documentFont   = b.document_font || 'Calibri';
@@ -608,12 +588,16 @@ export async function compileAndDownload(tender, tasks) {
       let imageType = 'png';
 
       // Try Supabase storage download first (handles auth automatically)
-      const storageMatch = logoUrl.match(/storage\/v1\/object\/(?:public\/|authenticated\/)?([^?]+)/);
+      // Extract bucket and path from any Supabase storage URL format
+      // URL formats: .../storage/v1/object/public/bucket-name/path/file.ext
+      //              .../storage/v1/object/authenticated/bucket-name/path/file.ext
+      const storageMatch = logoUrl.match(/\/storage\/v1\/object\/(?:public|authenticated|sign)\/([^?#]+)/);
       if (storageMatch) {
-        const storagePath = storageMatch[1];
-        const bucketMatch = storagePath.match(/^([^/]+)\/(.+)$/);
-        if (bucketMatch) {
-          const [, bucket, path] = bucketMatch;
+        const fullPath = storageMatch[1]; // "bucket-name/path/to/file.ext"
+        const slashIdx = fullPath.indexOf('/');
+        const bucket = slashIdx !== -1 ? fullPath.substring(0, slashIdx) : fullPath;
+        const path   = slashIdx !== -1 ? fullPath.substring(slashIdx + 1) : '';
+        if (bucket && path) {
           const { data: blob, error } = await supabase.storage.from(bucket).download(path);
           if (!error && blob) {
             const buf = await blob.arrayBuffer();
@@ -657,9 +641,17 @@ export async function compileAndDownload(tender, tasks) {
     new Paragraph({
       children: [new TextRun({ text: 'Tender Proposal', size: bodySize + 8, color: primaryColor, font })],
       alignment: coverAlign,
-      spacing: { after: 600 },
+      spacing: { after: tagline ? 200 : 600 },
     }),
   );
+
+  if (tagline) {
+    children.push(new Paragraph({
+      children: [new TextRun({ text: tagline, size: bodySize, color: '94a3b8', italics: true, font })],
+      alignment: coverAlign,
+      spacing: { after: 600 },
+    }));
+  }
 
   // ── Cover metadata table ──────────────────────────────────────────────────
   const metaRows = [
