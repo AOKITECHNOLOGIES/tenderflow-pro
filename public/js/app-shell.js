@@ -140,7 +140,7 @@ function buildLivePreview(tender, tasks) {
       ).join('');
       return `<div style="margin-bottom:28px;">
         <h2 style="font-size:15px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px;">${i + 1}. ${task.title}</h2>
-        <div style="font-size:13px;line-height:1.8;color:#334155;">${task.content.replace(/<table/g, '<table style="border-collapse:collapse;width:100%;margin:8px 0;"').replace(/<td/g, '<td style="border:1px solid #cbd5e1;padding:6px 10px;"').replace(/<th/g, '<th style="border:1px solid #cbd5e1;padding:6px 10px;background:#f1f5f9;font-weight:600;"')}</div>
+        <div class="tf-section-content" style="font-size:13px;line-height:1.8;color:#334155;">${task.content}</div>
         ${imgs}
       </div>`;
     }
@@ -153,6 +153,30 @@ function buildLivePreview(tender, tasks) {
   }).join('');
 
   return `<div class="bg-surface-800/40 border border-slate-700/40 rounded-xl overflow-hidden">
+    <style>
+      .tf-section-content h1 { font-size:19px;font-weight:700;margin:14px 0 7px;color:#0f172a; }
+      .tf-section-content h2 { font-size:16px;font-weight:700;margin:12px 0 5px;color:#0f172a; }
+      .tf-section-content h3 { font-size:14px;font-weight:600;margin:10px 0 4px;color:#1e293b; }
+      .tf-section-content p  { margin:0 0 7px;line-height:1.75; }
+      .tf-section-content ul,.tf-section-content ol { padding-left:1.4em;margin:3px 0 7px; }
+      .tf-section-content li { margin-bottom:3px;line-height:1.7; }
+      .tf-section-content strong { font-weight:700; }
+      .tf-section-content em { font-style:italic; }
+      .tf-section-content u  { text-decoration:underline; }
+      .tf-section-content s  { text-decoration:line-through; }
+      .tf-section-content blockquote { border-left:3px solid #e2e8f0;padding-left:10px;color:#64748b;margin:6px 0; }
+      .tf-section-content table { border-collapse:collapse;width:100%;margin:8px 0; }
+      .tf-section-content td,.tf-section-content th { border:1px solid #cbd5e1;padding:6px 10px; }
+      .tf-section-content th { background:#f1f5f9;font-weight:600; }
+      .tf-section-content pre { background:#f8fafc;padding:8px 12px;border-radius:4px;font-size:12px;overflow-x:auto; }
+      .tf-section-content code { background:#f1f5f9;padding:1px 4px;border-radius:3px;font-size:12px; }
+      .tf-section-content img { max-width:100%;height:auto;border-radius:4px;margin:6px 0; }
+      .ql-align-center { text-align:center; }
+      .ql-align-right  { text-align:right; }
+      .ql-align-justify { text-align:justify; }
+      .ql-indent-1 { padding-left:2em; }
+      .ql-indent-2 { padding-left:4em; }
+    </style>
     <div class="px-5 py-4 border-b border-slate-700/40 flex items-center justify-between">
       <h2 class="text-sm font-semibold text-white">Live Document Preview</h2>
       <span class="text-xs text-slate-500">${approvedCount} of ${(tasks || []).length} sections approved</span>
