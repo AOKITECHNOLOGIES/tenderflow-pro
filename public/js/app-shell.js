@@ -100,18 +100,7 @@ function renderSidebar() {
       </div>
     </div>`;
 
-  if (isSuperAdmin()) {
-    html += `<div class="px-4 py-3 border-b border-slate-800/60">
-      <label class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-2 block">View Scope</label>
-      <div class="flex bg-surface-900 rounded-lg p-0.5">
-        <button id="scope-global" class="flex-1 text-xs py-1.5 rounded-md text-center transition ${_viewScope === 'global' ? 'bg-brand-500/20 text-brand-400 font-medium' : 'text-slate-400 hover:text-slate-300'}" onclick="window._setScope('global')">${icon('globe')} Global</button>
-        <button id="scope-company" class="flex-1 text-xs py-1.5 rounded-md text-center transition ${_viewScope === 'company' ? 'bg-brand-500/20 text-brand-400 font-medium' : 'text-slate-400 hover:text-slate-300'}" onclick="window._setScope('company')">${icon('building')} Company</button>
-      </div>
-      <select id="scope-company-select" class="${_viewScope === 'company' ? '' : 'hidden'} mt-2 w-full text-xs bg-surface-900 border border-slate-700/50 rounded-lg px-2 py-1.5 text-slate-300" onchange="window._selectCompany(this.value)">
-        <option value="">Select company...</option>
-      </select>
-    </div>`;
-  }
+
 
   html += `<nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">`;
   for (const item of items) {
@@ -182,7 +171,7 @@ const views = {
 
   async dashboard() {
     const profile = getProfile();
-    const isGlobalSuperAdmin = isSuperAdmin() && _viewScope === 'global';
+    const isGlobalSuperAdmin = isSuperAdmin(); // always global — scope switcher removed
     const companyFilter = isGlobalSuperAdmin ? {} : { company_id: _selectedCompanyId || profile.company_id };
     const [tenders, tasks, myTasks] = await Promise.all([
       supabase.from('tenders').select('id, status, deadline', { count: 'exact' }).match(companyFilter),
@@ -250,7 +239,7 @@ const views = {
 
   async tenders() {
     const profile = getProfile();
-    const isGlobalAdmin = isSuperAdmin() && _viewScope === 'global';
+    const isGlobalAdmin = isSuperAdmin(); // always global
     const query = supabase.from('tenders').select('*, profiles!tenders_created_by_fkey(full_name)').order('created_at', { ascending: false });
     if (!isGlobalAdmin) query.eq('company_id', _selectedCompanyId || profile.company_id);
     const { data: tenders } = await query;
@@ -1257,20 +1246,10 @@ export function mountAppShell() {
         </div>
       </div>
     </main>`;
-  if (isSuperAdmin()) loadCompaniesForScope();
   import('./ai-chat.js').then(({ mountAIChat }) => mountAIChat()).catch(() => {});
 }
 
-async function loadCompaniesForScope() {
-  const select = document.getElementById('scope-company-select');
-  if (!select) return;
-  const { data } = await supabase.from('companies').select('id, name').eq('is_active', true).order('name');
-  for (const c of (data || [])) {
-    const opt = document.createElement('option');
-    opt.value = c.id; opt.textContent = c.name;
-    select.appendChild(opt);
-  }
-}
+
 
 export async function refreshView(route) {
   const container = document.getElementById('view-container');
@@ -1308,22 +1287,12 @@ export async function renderView(route) {
     container.innerHTML = `<div class="p-8 text-center text-slate-500">View "${route.view}" not implemented yet.</div>`;
   }
   const sidebar = document.getElementById('sidebar');
-  if (sidebar) { sidebar.outerHTML = renderSidebar(); if (isSuperAdmin()) loadCompaniesForScope(); }
+  if (sidebar) { sidebar.outerHTML = renderSidebar(); }
 }
 
 window._logout = async () => { await logout(); navigate('/login'); };
 
-window._setScope = (scope) => {
-  _viewScope = scope;
-  document.getElementById('scope-company-select')?.classList.toggle('hidden', scope !== 'company');
-  const route = getCurrentRoute(); if (route) renderView(route);
-};
 
-window._selectCompany = async (id) => {
-  _selectedCompanyId = id || null;
-  const route = getCurrentRoute(); if (!route || !_selectedCompanyId) return;
-  await renderView(route);
-};
 
 window._toggleCompany = async (id, active) => {
   await supabase.from('companies').update({ is_active: active }).eq('id', id);
