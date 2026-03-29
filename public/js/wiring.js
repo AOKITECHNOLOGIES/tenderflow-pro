@@ -297,9 +297,9 @@ function attachTaskDetailHandlers() {
     const container = editorEl.querySelector('.ql-container');
     if (toolbar) {
       toolbar.style.cssText = [
-        'border-color: rgba(100,116,139,0.3)',
+        'border-color: rgba(56,189,248,0.4)',
         'border-radius: 8px 8px 0 0',
-        'background: #1e293b',
+        'background: #1e3a5f',
       ].join('; ');
       toolbar.querySelectorAll('button, .ql-picker').forEach(el => { el.style.color = '#94a3b8'; });
       toolbar.querySelectorAll('.ql-stroke').forEach(el => el.style.stroke = '#94a3b8');
@@ -307,12 +307,13 @@ function attachTaskDetailHandlers() {
     }
     if (container) {
       container.style.cssText = [
-        'border-color: rgba(100,116,139,0.3)',
+        'border-color: rgba(56,189,248,0.35)',
+        'border-top: none',
         'border-radius: 0 0 8px 8px',
         'font-size: 14px',
-        'min-height: 240px',
-        'color: #e2e8f0',
-        'background: #0f172a',
+        'min-height: 360px',
+        'color: #f1f5f9',
+        'background: #1a2540',
       ].join('; ');
     }
 
@@ -321,7 +322,7 @@ function attachTaskDetailHandlers() {
       const style = document.createElement('style');
       style.id = styleId;
       style.textContent = `
-        .ql-editor { white-space: normal; }
+        .ql-editor { white-space: normal; color: #f1f5f9 !important; }
         .ql-editor p { margin: 0 0 0.6em 0; }
         .ql-editor ol, .ql-editor ul { margin: 0.2em 0; padding-left: 1.5em; }
         .ql-editor li { margin: 0; }
