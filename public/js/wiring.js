@@ -309,8 +309,9 @@ function attachTaskDetailHandlers() {
       const style = document.createElement('style');
       style.id = styleId;
       style.textContent = `
-        .ql-editor { white-space: pre-wrap; }
-        .ql-editor ol, .ql-editor ul { margin: 0; padding-left: 1.5em; }
+        .ql-editor { white-space: normal; }
+        .ql-editor p { margin: 0 0 0.6em 0; }
+        .ql-editor ol, .ql-editor ul { margin: 0.2em 0; padding-left: 1.5em; }
         .ql-editor li { margin: 0; }
         .ql-editor .ql-indent-1 { padding-left: 3em; }
         .ql-editor .ql-indent-2 { padding-left: 4.5em; }
