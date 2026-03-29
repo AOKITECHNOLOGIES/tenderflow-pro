@@ -277,8 +277,8 @@ function attachTaskDetailHandlers() {
     });
 
     const hidden = document.getElementById('task-content-hidden');
-    if (hidden?.textContent?.trim()) {
-      window._quillEditor.root.innerHTML = hidden.textContent;
+    if (hidden?.innerHTML?.trim()) {
+      window._quillEditor.root.innerHTML = hidden.innerHTML;
     }
 
     const toolbar   = editorEl.querySelector('.ql-toolbar');
