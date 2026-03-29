@@ -515,16 +515,18 @@ const views = {
         </div>
         <div class="p-5">
           ${canEdit ? `
-            <div id="quill-toolbar-extra" class="flex gap-1 mb-1">
-              <button type="button" title="Insert Table" onclick="window._insertTable()" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-300 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-                Insert Table
-              </button>
-              <button type="button" title="Add Row Below" onclick="window._tableAddRow()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Row</button>
-              <button type="button" title="Add Column Right" onclick="window._tableAddCol()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Col</button>
-              <button type="button" title="Delete Table" onclick="window._tableDelete()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-red-500/10 transition">✕ Table</button>
+            <div id="quill-sticky-wrap" style="position:sticky; top:0; z-index:40; background:#0f172a; border-radius:10px 10px 0 0; padding-top:4px;">
+              <div id="quill-toolbar-extra" class="flex gap-1 pb-2 px-1">
+                <button type="button" title="Insert Table" onclick="window._insertTable()" class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-300 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+                  Insert Table
+                </button>
+                <button type="button" title="Add Row Below" onclick="window._tableAddRow()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Row</button>
+                <button type="button" title="Add Column Right" onclick="window._tableAddCol()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-slate-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-slate-700/40 hover:text-white transition">+ Col</button>
+                <button type="button" title="Delete Table" onclick="window._tableDelete()" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-400 bg-surface-900/60 border border-slate-600/50 rounded hover:bg-red-500/10 transition">✕ Table</button>
+              </div>
             </div>
-            <div id="quill-editor" style="min-height:280px; background:#0f172a; color:#e2e8f0; border-radius:8px; border:1px solid rgba(100,116,139,0.3);"></div>
+            <div id="quill-editor" style="min-height:360px; background:#1a2540; color:#f1f5f9; border-radius:0 0 8px 8px; border:2px solid rgba(56,189,248,0.35);"></div>
             <div id="task-content-hidden" style="display:none">${draft?.content || task.content || ''}</div>
             <div class="flex items-center justify-between mt-3">
               <p id="save-status" class="text-xs text-slate-500">Auto-saves offline</p>
@@ -1264,6 +1266,21 @@ export function mountAppShell() {
       .ql-align-center { text-align:center !important; }
       .ql-align-right  { text-align:right !important; }
       .ql-align-justify { text-align:justify !important; }
+      /* Sticky Quill toolbar */
+      #quill-sticky-wrap .ql-toolbar { position:sticky !important; top:0 !important; z-index:40 !important; background:#1e3a5f !important; border-color:rgba(56,189,248,0.4) !important; border-radius:8px 8px 0 0 !important; }
+      #quill-editor .ql-container { border-color:rgba(56,189,248,0.35) !important; border-top:none !important; }
+      #quill-editor .ql-editor { min-height:360px; color:#f1f5f9 !important; font-size:14px; line-height:1.8; }
+      #quill-editor .ql-editor p { margin-bottom: 0.5em; }
+      /* Brighter toolbar icons */
+      #quill-sticky-wrap .ql-toolbar button svg .ql-stroke { stroke:#94a3b8 !important; }
+      #quill-sticky-wrap .ql-toolbar button svg .ql-fill { fill:#94a3b8 !important; }
+      #quill-sticky-wrap .ql-toolbar button:hover svg .ql-stroke { stroke:#f1f5f9 !important; }
+      #quill-sticky-wrap .ql-toolbar button:hover svg .ql-fill { fill:#f1f5f9 !important; }
+      #quill-sticky-wrap .ql-toolbar button.ql-active svg .ql-stroke { stroke:#38bdf8 !important; }
+      #quill-sticky-wrap .ql-toolbar button.ql-active svg .ql-fill { fill:#38bdf8 !important; }
+      #quill-sticky-wrap .ql-toolbar .ql-picker-label { color:#94a3b8 !important; }
+      #quill-sticky-wrap .ql-toolbar .ql-picker-options { background:#1e3a5f !important; border-color:rgba(56,189,248,0.4) !important; }
+      #quill-sticky-wrap .ql-toolbar .ql-picker-item:hover { color:#38bdf8 !important; }
       .ql-indent-1 { padding-left:2em !important; }
       .ql-indent-2 { padding-left:4em !important; }
       .ql-indent-3 { padding-left:6em !important; }
