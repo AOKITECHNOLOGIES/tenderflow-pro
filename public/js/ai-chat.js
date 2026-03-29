@@ -259,11 +259,10 @@ async function loadTenderDocuments(tenderId) {
       try {
         if (!doc.storage_path) continue;
 
-        // Parse bucket and path from storage_path
-        const slashIdx = doc.storage_path.indexOf('/');
-        if (slashIdx === -1) continue;
-        const bucket = doc.storage_path.substring(0, slashIdx);
-        const path   = doc.storage_path.substring(slashIdx + 1);
+        // All tender documents are stored in the 'documents' bucket
+        // storage_path format: company_id/tender_id/filename.ext
+        const bucket = 'documents';
+        const path = doc.storage_path;
 
         const { data: blob, error } = await supabase.storage.from(bucket).download(path);
         if (error || !blob) continue;
