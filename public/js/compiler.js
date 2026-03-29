@@ -712,7 +712,8 @@ export async function compileAndDownload(tender, tasks) {
     spacing: { before: 400, after: 300 },
   }));
 
-  compiledSections.forEach((section, i) => {
+  for (let i = 0; i < compiledSections.length; i++) {
+    const section = compiledSections[i];
     children.push(new Paragraph({
       children: [
         new TextRun({ text: `${i + 1}. ${section.title}`, size: bodySize, font }),
@@ -722,12 +723,13 @@ export async function compileAndDownload(tender, tasks) {
       ],
       spacing: { after: 120 },
     }));
-  });
+  }
 
   // ── Page break → Sections ─────────────────────────────────────────────────
   children.push(new Paragraph({ children: [new PageBreak()] }));
 
-  compiledSections.forEach((section, i) => {
+  for (let i = 0; i < compiledSections.length; i++) {
+    const section = compiledSections[i];
     children.push(
       new Paragraph({
         children: [new TextRun({ text: `${i + 1}. ${section.title}`, bold: true, size: headingSize, color: primaryColor, font })],
@@ -748,7 +750,7 @@ export async function compileAndDownload(tender, tasks) {
 
     // Convert Quill HTML to properly formatted docx paragraphs
     const contentParagraphs = await htmlToDocxParagraphs(section.content, { font, bodySize, primaryColor });
-    contentParagraphs.forEach(p => children.push(p));
+    for (const p of contentParagraphs) children.push(p);
 
     // Append task images after content
     if (section.images?.length) {
@@ -771,7 +773,7 @@ export async function compileAndDownload(tender, tasks) {
     }
 
     children.push(new Paragraph({ spacing: { after: 300 } }));
-  });
+  }
 
   // ── Last page ─────────────────────────────────────────────────────────────
   children.push(
