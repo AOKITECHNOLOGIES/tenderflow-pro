@@ -893,12 +893,17 @@ const views = {
             extractionNote = extractErr.message;
             console.warn(`[KB] Text extraction failed for ${f.name}:`, extractErr.message);
           }
-          const dataUrl = await new Promise((resolve, reject) => {
-            const rd = new FileReader();
-            rd.onload = ev => resolve(ev.target.result);
-            rd.onerror = reject;
-            rd.readAsDataURL(f);
-          });
+          // Only store base64 for small text files — PDF/DOCX base64 blows the 5MB quota
+          const isTextFile = f.type.startsWith('text/') || f.name.endsWith('.txt') || f.name.endsWith('.md');
+          let dataUrl = null;
+          if (isTextFile && f.size < 500000) {
+            dataUrl = await new Promise((resolve, reject) => {
+              const rd = new FileReader();
+              rd.onload = ev => resolve(ev.target.result);
+              rd.onerror = reject;
+              rd.readAsDataURL(f);
+            });
+          }
           const d = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
           d.push({
             id: Date.now() + Math.random(),
