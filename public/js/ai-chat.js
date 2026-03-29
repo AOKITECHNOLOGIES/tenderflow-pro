@@ -92,6 +92,10 @@ export function mountAIChat() {
           <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full kb-indicator"></span>
           <span class="text-[10px] text-emerald-400">KB</span>
         </div>
+        <div id="ai-rfp-indicator" class="hidden items-center gap-1 px-2 py-0.5 bg-violet-500/10 border border-violet-500/20 rounded-full" title="RFP document loaded">
+          <span class="w-1.5 h-1.5 bg-violet-400 rounded-full kb-indicator"></span>
+          <span class="text-[10px] text-violet-400">RFP</span>
+        </div>
         <button onclick="window._aiChatClear()" title="Clear chat" class="text-slate-500 hover:text-slate-300 transition p-1 rounded">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
         </button>
@@ -111,10 +115,11 @@ export function mountAIChat() {
           <ul>
             <li>Your current page context and tender details</li>
             <li>Your Knowledge Base documents (including content)</li>
-            <li>Your document repository</li>
+            <li>The full RFP/RFQ document text for this tender</li>
+            <li>All supporting documents and attachments</li>
             <li>Your active tasks and deadlines</li>
           </ul>
-          <p class="mt-2 text-slate-400 text-xs">Ask me anything about your tenders, internal processes, or company documents.</p>
+          <p class="mt-2 text-slate-400 text-xs">Ask me anything about your tenders, RFP requirements, or company documents.</p>
         </div>
       </div>
     </div>
@@ -126,7 +131,7 @@ export function mountAIChat() {
         <textarea
           id="ai-chat-input"
           rows="1"
-          placeholder="Ask about tenders, processes, or your documents..."
+          placeholder="Ask about tenders, RFP requirements, or your documents..."
           class="flex-1 px-3 py-2.5 bg-surface-800 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500/60 focus:ring-1 focus:ring-violet-500/30 resize-none transition"
           style="max-height: 120px; overflow-y: auto;"
           onkeydown="window._aiChatKeydown(event)"
@@ -140,7 +145,7 @@ export function mountAIChat() {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
-      <p class="text-[10px] text-slate-600 mt-1.5 text-center">Powered by Claude · Knowledge Base + Document context</p>
+      <p class="text-[10px] text-slate-600 mt-1.5 text-center">Powered by Claude · KB + RFP + Document context</p>
     </div>
   `;
   document.body.appendChild(panel);
@@ -181,14 +186,14 @@ window._aiChatClear = () => {
   _contextCache = null;
   const msgs = document.getElementById('ai-chat-messages');
   if (msgs) msgs.innerHTML = '';
-  appendAIMessage("Chat cleared. I still have access to your Knowledge Base and current page context — ask me anything!");
+  appendAIMessage("Chat cleared. I still have access to your Knowledge Base, RFP documents, and current page context — ask me anything!");
   refreshSuggestions();
 };
 window._aiChatKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window._aiChatSend(); }
 };
 
-// ── Load Knowledge Base documents from localStorage ──────────────────────────
+// ── Load Knowledge Base from localStorage ─────────────────────────────────────
 function loadKnowledgeBase() {
   try {
     const docs = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
@@ -196,11 +201,9 @@ function loadKnowledgeBase() {
 
     const previews = docs.map(d => {
       const category = d.category === 'tender' ? 'Past Tender' : 'Company Document';
-
-      // Prefer extractedText stored at upload time (PDF/DOCX/TXT all populate this)
       let textPreview = '';
+
       if (d.extractedText && d.extractedText.length > 20) {
-        // Send up to 8000 chars per doc — enough for meaningful content
         textPreview = d.extractedText.substring(0, 8000);
         if (d.extractedText.length > 8000) {
           textPreview += `\n\n[... ${Math.round((d.extractedText.length - 8000) / 5).toLocaleString()} more words not shown]`;
@@ -208,13 +211,10 @@ function loadKnowledgeBase() {
       } else if (d.extractionNote) {
         textPreview = `[Could not extract text: ${d.extractionNote}]`;
       } else {
-        // Legacy docs uploaded before extraction was added — try base64 decode for text files
         try {
           if (d.content && d.content.startsWith('data:text')) {
             const base64 = d.content.split(',')[1];
-            if (base64) {
-              textPreview = atob(base64).substring(0, 4000).replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
-            }
+            if (base64) textPreview = atob(base64).substring(0, 4000).replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
           }
         } catch (_) {}
         if (!textPreview) textPreview = '[No text content — re-upload this file to enable AI reading]';
@@ -238,7 +238,90 @@ function loadKnowledgeBase() {
   }
 }
 
-// ── Load documents from Supabase document vault ──────────────────────────────
+// ── Fetch and extract text from tender documents in Supabase storage ──────────
+async function loadTenderDocuments(tenderId) {
+  if (!tenderId) return null;
+  try {
+    const { data: docs } = await supabase
+      .from('documents')
+      .select('id, file_name, doc_type, storage_path, file_type, task_id')
+      .eq('tender_id', tenderId)
+      .not('doc_type', 'eq', 'task_image')
+      .order('created_at', { ascending: true });
+
+    if (!docs?.length) return null;
+
+    const results = [];
+
+    for (const doc of docs) {
+      try {
+        if (!doc.storage_path) continue;
+
+        // Parse bucket and path from storage_path
+        const slashIdx = doc.storage_path.indexOf('/');
+        if (slashIdx === -1) continue;
+        const bucket = doc.storage_path.substring(0, slashIdx);
+        const path   = doc.storage_path.substring(slashIdx + 1);
+
+        const { data: blob, error } = await supabase.storage.from(bucket).download(path);
+        if (error || !blob) continue;
+
+        let text = '';
+        const name = (doc.file_name || '').toLowerCase();
+        const mime = doc.file_type || '';
+
+        if (mime.startsWith('text/') || name.endsWith('.txt') || name.endsWith('.md')) {
+          text = await blob.text();
+        } else if (name.endsWith('.pdf') || mime === 'application/pdf') {
+          const pdfjs = window.pdfjsLib;
+          if (pdfjs) {
+            if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+              pdfjs.GlobalWorkerOptions.workerSrc =
+                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            }
+            const buf = await blob.arrayBuffer();
+            const pdf = await pdfjs.getDocument({ data: buf }).promise;
+            for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+              const page = await pdf.getPage(i);
+              const content = await page.getTextContent();
+              const pageText = content.items.map(item => item.str).join(' ')
+                .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ')
+                .replace(/\s{3,}/g, ' ').trim();
+              if (pageText.length > 10) text += pageText + '\n\n';
+            }
+          }
+        } else if (name.endsWith('.docx') || mime.includes('wordprocessingml')) {
+          const mammoth = await import('https://esm.sh/mammoth@1.6.0');
+          const buf = await blob.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer: buf });
+          text = result.value || '';
+        }
+
+        text = text.replace(/\s{3,}/g, '  ').trim();
+        if (text.length < 30) continue;
+
+        const label = doc.doc_type === 'rfq_source'  ? '📋 RFP/RFQ Document' :
+                      doc.doc_type === 'supporting'   ? '📎 Supporting Document' :
+                      doc.task_id                      ? '📝 Task Attachment' :
+                                                         '📄 Document';
+        results.push({
+          label,
+          name: doc.file_name,
+          text: text.substring(0, 15000),
+          truncated: text.length > 15000,
+        });
+      } catch (_) {
+        // Skip docs that fail silently
+      }
+    }
+
+    return results.length ? results : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ── Load document repository index from Supabase ──────────────────────────────
 async function loadDocumentRepository() {
   try {
     const profile = getProfile();
@@ -255,7 +338,7 @@ async function loadDocumentRepository() {
   }
 }
 
-// ── Build context snapshot from current page ─────────────────────────────────
+// ── Build context snapshot ────────────────────────────────────────────────────
 async function buildContext() {
   if (_contextCache) return _contextCache;
 
@@ -273,25 +356,29 @@ async function buildContext() {
     current_page: route?.view || 'dashboard',
     tender: null,
     task: null,
+    tender_documents: null,
     my_tasks: [],
     recent_tenders: [],
     knowledge_base: null,
     document_repository: [],
   };
 
-  // Load Knowledge Base from localStorage (with content decoding)
+  // Knowledge Base
   const kb = loadKnowledgeBase();
   if (kb) {
     ctx.knowledge_base = kb;
-    const indicator = document.getElementById('ai-kb-indicator');
-    if (indicator) { indicator.classList.remove('hidden'); indicator.classList.add('flex'); }
+    const ind = document.getElementById('ai-kb-indicator');
+    if (ind) { ind.classList.remove('hidden'); ind.classList.add('flex'); }
   }
 
-  // Load document repository from Supabase
+  // Document repository index
   ctx.document_repository = await loadDocumentRepository();
 
-  // Fetch tender context
+  // Resolve tender ID
+  let tenderId = null;
+
   if (params.id && (route?.view === 'tender-detail' || route?.view === 'tender-compile')) {
+    tenderId = params.id;
     const { data: tender } = await supabase.from('tenders')
       .select('id, title, reference_number, status, deadline, issuing_authority, account_manager, description, ai_analysis')
       .eq('id', params.id).single();
@@ -316,15 +403,26 @@ async function buildContext() {
     }
   }
 
-  // Fetch task context
   if (params.id && route?.view === 'task-detail') {
     const { data: task } = await supabase.from('tasks')
       .select('id, title, description, content, status, section_type, is_mandatory, priority, review_notes, tender_id, tenders(title, reference_number, deadline, issuing_authority)')
       .eq('id', params.id).single();
-    if (task) ctx.task = task;
+    if (task) {
+      ctx.task = task;
+      tenderId = task.tender_id;
+    }
   }
 
-  // Fetch user's active tasks
+  // Fetch and extract tender documents (RFP + supporting)
+  if (tenderId) {
+    ctx.tender_documents = await loadTenderDocuments(tenderId);
+    if (ctx.tender_documents?.length) {
+      const ind = document.getElementById('ai-rfp-indicator');
+      if (ind) { ind.classList.remove('hidden'); ind.classList.add('flex'); }
+    }
+  }
+
+  // My active tasks
   const { data: myTasks } = await supabase.from('tasks')
     .select('id, title, status, due_date, tenders(title)')
     .eq('assigned_to', profile.id)
@@ -338,7 +436,7 @@ async function buildContext() {
     tender: t.tenders?.title || 'Unknown',
   }));
 
-  // Fetch recent tenders
+  // Recent tenders
   const { data: tenders } = await supabase.from('tenders')
     .select('title, status, deadline, reference_number')
     .eq('company_id', profile.company_id)
@@ -356,7 +454,7 @@ async function buildContext() {
   return ctx;
 }
 
-// ── Update context label in header ───────────────────────────────────────────
+// ── Update context label ──────────────────────────────────────────────────────
 async function updateContextLabel() {
   const label = document.getElementById('ai-chat-context-label');
   if (!label) return;
@@ -396,10 +494,10 @@ async function refreshSuggestions() {
   const hasKB = (kb?.count || 0) > 0;
 
   const suggestionMap = {
-    'tender-detail': ['Summarise this tender for me', 'Which tasks are still pending?', 'What are the critical deadlines?', 'Help me write the executive summary'],
-    'task-detail':   ['Help me write this section', 'What should I include here?', 'How long should this section be?', 'Give me a structure to follow'],
+    'tender-detail': ['Summarise the RFP for me', 'What are the mandatory requirements?', 'Which tasks are still pending?', 'Help me write the executive summary'],
+    'task-detail':   ['Help me write this section', 'What does the RFP say about this?', 'How long should this section be?', 'Give me a professional draft'],
     'knowledge-base': ['What documents do I have?', 'Summarise my company profile', 'What are our key capabilities?', 'Find relevant info for a tender'],
-    'documents':     ['What documents do I have uploaded?', 'Which documents are linked to tenders?', 'Help me find a specific document'],
+    'documents':     ['What documents are uploaded?', 'Which documents are linked to tenders?', 'Help me find a specific document'],
     'dashboard':     ['What are my most urgent tasks?', 'Which tenders need attention?', hasKB ? 'What does my Knowledge Base contain?' : 'How do I use the Knowledge Base?'],
     'tenders':       ['What makes a winning tender?', 'How should I structure my response?', hasKB ? 'Use my KB to help with a tender' : 'Explain the tender process'],
     'default':       ['How does TenderFlow work?', 'Help me with B-BBEE compliance', hasKB ? 'Search my Knowledge Base' : 'What is a good pricing strategy?'],
@@ -461,7 +559,6 @@ window._aiChatSend = async () => {
   } catch (err) {
     removeThinking(thinkingId);
     appendAIMessage(`Sorry, I ran into an error: ${err.message}. Please try again.`, true);
-    console.error('[AI Chat]', err);
   } finally {
     _isThinking = false;
     setInputDisabled(false);
@@ -469,9 +566,12 @@ window._aiChatSend = async () => {
   }
 };
 
-// ── Build system prompt with page context + KB + documents ───────────────────
+// ── Build system prompt ───────────────────────────────────────────────────────
 function buildSystemPrompt(ctx) {
-  const roleLabels = { super_admin: 'Super Administrator', it_admin: 'IT Administrator', bid_manager: 'Bid Manager', dept_user: 'Team Member' };
+  const roleLabels = {
+    super_admin: 'Super Administrator', it_admin: 'IT Administrator',
+    bid_manager: 'Bid Manager', dept_user: 'Team Member',
+  };
 
   let prompt = `You are TenderFlow AI, an expert assistant built into the TenderFlow Pro tender management platform. You help bid managers and their teams write winning tender proposals, understand requirements, manage tasks, and navigate the platform.
 
@@ -494,30 +594,49 @@ You are an expert in:
 - Bid strategy and win themes
 - Project management and implementation plans`;
 
-  // ── Knowledge Base context ──
+  // ── Knowledge Base ──
   if (ctx.knowledge_base) {
     prompt += `
 
 ## Company Knowledge Base (${ctx.knowledge_base.count} documents — ${ctx.knowledge_base.companyDocs} company docs, ${ctx.knowledge_base.tenderDocs} past tenders)
-The user has uploaded the following documents. Use these when answering questions about company capabilities, internal processes, or when helping write tender responses:
+Use these when answering questions about company capabilities or writing tender responses:
 
-${ctx.knowledge_base.previews}
-
-When answering questions about the company, reference these documents by name and use their content to give accurate, specific answers. If a document has readable content, use it directly to answer questions.`;
+${ctx.knowledge_base.previews}`;
   } else {
     prompt += `
 
 ## Knowledge Base
-No documents have been uploaded to the Knowledge Base yet. Suggest uploading .txt or .md versions of company documents (profile, capabilities, past proposals) for better AI assistance.`;
+No documents uploaded yet. Suggest uploading company profile, capabilities, or past proposals.`;
   }
 
-  // ── Document repository context ──
+  // ── Tender Documents (full extracted text) ──
+  if (ctx.tender_documents?.length) {
+    prompt += `
+
+## Tender Documents — Full Text (${ctx.tender_documents.length} file${ctx.tender_documents.length !== 1 ? 's' : ''})
+These are the actual documents uploaded for this tender. Use this text to answer any questions about RFP requirements, scoring criteria, deliverables, deadlines, or evaluation criteria:
+
+`;
+    for (const doc of ctx.tender_documents) {
+      prompt += `### ${doc.label}: ${doc.name}\n\n${doc.text}\n`;
+      if (doc.truncated) prompt += `\n[Note: Document truncated — showing first 15,000 characters]\n`;
+      prompt += '\n---\n\n';
+    }
+    prompt += `When the user asks "what does the RFP say about X", answer directly from the document text above. Quote specific requirements when relevant.`;
+  } else if (ctx.tender || ctx.task) {
+    prompt += `
+
+## Tender Documents
+No documents have been uploaded for this tender yet. The user can upload the RFP/RFQ from the tender detail page using the Import Document button.`;
+  }
+
+  // ── Document repository index ──
   if (ctx.document_repository?.length) {
     prompt += `
 
-## Document Repository (${ctx.document_repository.length} files)
+## Document Repository Index (${ctx.document_repository.length} files across all tenders)
 ${ctx.document_repository.map(doc =>
-  `- ${doc.file_name} [${(doc.doc_type || 'document').replace(/_/g, ' ')}]${doc.tenders?.title ? ` — linked to: ${doc.tenders.title}` : ''} (${new Date(doc.created_at).toLocaleDateString()})`
+  `- ${doc.file_name} [${(doc.doc_type || 'document').replace(/_/g, ' ')}]${doc.tenders?.title ? ` — ${doc.tenders.title}` : ''} (${new Date(doc.created_at).toLocaleDateString()})`
 ).join('\n')}`;
   }
 
@@ -525,7 +644,7 @@ ${ctx.document_repository.map(doc =>
   if (ctx.tender) {
     prompt += `
 
-## Current Tender Context
+## Current Tender
 - Title: ${ctx.tender.title}
 - Reference: ${ctx.tender.reference_number || 'Not set'}
 - Status: ${ctx.tender.status}
@@ -546,8 +665,8 @@ ${ctx.tender.info_items?.length ? `### Key Information:\n${ctx.tender.info_items
   if (ctx.task) {
     prompt += `
 
-## Current Task Context
-- Task Title: ${ctx.task.title}
+## Current Task
+- Title: ${ctx.task.title}
 - Section Type: ${ctx.task.section_type || 'general'}
 - Status: ${ctx.task.status}
 - Mandatory: ${ctx.task.is_mandatory ? 'Yes' : 'No'}
@@ -555,7 +674,7 @@ ${ctx.tender.info_items?.length ? `### Key Information:\n${ctx.tender.info_items
 - Deadline: ${ctx.task.tenders?.deadline ? new Date(ctx.task.tenders.deadline).toLocaleDateString() : 'Not set'}
 ${ctx.task.description ? `- Brief: ${ctx.task.description}` : ''}
 ${ctx.task.review_notes ? `- Revision Notes: ${ctx.task.review_notes}` : ''}
-${ctx.task.content ? `- Current Content (first 500 chars): ${ctx.task.content.substring(0, 500)}${ctx.task.content.length > 500 ? '...' : ''}` : '- No content written yet'}`;
+${ctx.task.content ? `- Current Draft (first 800 chars):\n${ctx.task.content.replace(/<[^>]+>/g, ' ').substring(0, 800)}${ctx.task.content.length > 800 ? '...' : ''}` : '- No content written yet'}`;
   }
 
   if (ctx.my_tasks?.length) {
@@ -577,12 +696,12 @@ ${ctx.recent_tenders.map(t => `- ${t.title} [${t.status}] Ref: ${t.ref} — Due:
 ## Response Guidelines
 - Be concise but thorough
 - Use markdown formatting where helpful
-- When helping write content, provide actual draft text
+- When helping write content, provide actual draft text the user can paste directly into their task
 - For South African tenders, consider PPPFA 80/20 or 90/10, B-BBEE, and CSD requirements
-- Reference specific Knowledge Base documents by name when answering questions about company capabilities
-- If KB documents have content previews, use that information to give accurate, company-specific answers
-- Never make up tender requirements or deadlines not in the context
-- If something isn't in the KB, say so and suggest what documents would help`;
+- When asked about RFP requirements, quote directly from the tender documents above
+- Reference KB documents by name when drawing on company capabilities
+- Never make up requirements or deadlines not present in the context above
+- If something isn't in the documents, say so clearly and suggest where to find it`;
 
   return prompt;
 }
