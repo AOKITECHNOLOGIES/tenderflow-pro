@@ -258,6 +258,18 @@ function attachTaskDetailHandlers() {
       try { window._quillEditor = null; } catch (_) {}
     }
 
+    // Fix Quill link sanitizer — by default Quill prepends the current page URL
+    // to any link that doesn't start with http/https/mailto, breaking external links.
+    // Override sanitize to auto-add https:// when no protocol is present.
+    const Link = Quill.import('formats/link');
+    Link.sanitize = function(url) {
+      if (!url) return url;
+      // Already has a valid protocol — leave untouched
+      if (/^(https?:|mailto:|tel:|ftp:)/i.test(url)) return url;
+      // Looks like a domain — prepend https://
+      return 'https://' + url;
+    };
+
     window._quillEditor = new Quill('#quill-editor', {
       theme: 'snow',
       placeholder: 'Write your section content here...',
