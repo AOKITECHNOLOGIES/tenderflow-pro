@@ -121,14 +121,18 @@ async function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {})
           const isHeader = cell.tagName?.toLowerCase() === 'th';
           const cellRuns = parseInlineRuns(cell);
           if (isHeader) cellRuns.forEach(r => { r.bold = true; });
+          // Distribute columns evenly across page width
+          const colCount = tr.querySelectorAll('td, th').length || 1;
+          const cellWidth = Math.floor(9026 / colCount);
           cells.push(new TableCell({
+            width: { size: cellWidth, type: WidthType.DXA },
             borders: {
               top:    { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
               bottom: { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
               left:   { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
               right:  { style: BorderStyle.SINGLE, size: 1, color: 'e2e8f0' },
             },
-            children: [new Paragraph({ children: cellRuns, spacing: { after: 60 } })],
+            children: [new Paragraph({ children: cellRuns, spacing: { before: 60, after: 60 } })],
             shading: isHeader ? { fill: 'f1f5f9' } : undefined,
           }));
         });
@@ -136,7 +140,7 @@ async function htmlToDocxParagraphs(html, { font, bodySize, primaryColor } = {})
       });
       if (rows.length) {
         paragraphs.push(new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
+          width: { size: 9026, type: WidthType.DXA },
           rows,
         }));
         paragraphs.push(new Paragraph({ spacing: { after: 160 } }));
@@ -670,21 +674,23 @@ export async function compileAndDownload(tender, tasks) {
   ].filter(([, v]) => v !== null);
 
   children.push(new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: 9026, type: WidthType.DXA },
     rows: metaRows.map(([label, value]) => new TableRow({
       children: [
         new TableCell({
-          width: { size: 30, type: WidthType.PERCENTAGE },
+          width: { size: 2708, type: WidthType.DXA },
           borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
           children: [new Paragraph({
             children: [new TextRun({ text: label, bold: true, size: bodySize - 2, color: '64748b', font })],
+            spacing: { before: 60, after: 60 },
           })],
         }),
         new TableCell({
-          width: { size: 70, type: WidthType.PERCENTAGE },
+          width: { size: 6318, type: WidthType.DXA },
           borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
           children: [new Paragraph({
             children: [new TextRun({ text: value, size: bodySize - 2, font })],
+            spacing: { before: 60, after: 60 },
           })],
         }),
       ],
