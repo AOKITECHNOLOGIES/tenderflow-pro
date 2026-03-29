@@ -820,18 +820,33 @@ const views = {
 
   // ── Batch 3 Views ─────────────────────────────
   'knowledge-base': async function() {
-    const allDocs    = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
-    const companyDocs = allDocs.filter(d => d.category === 'company' || !d.category);
-    const tenderDocs  = allDocs.filter(d => d.category === 'tender');
+    const profile = getProfile();
+    const companyId = _selectedCompanyId || profile.company_id;
 
-    window._deleteKBDoc = id => {
-      const d = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]').filter(x => x.id !== id);
-      localStorage.setItem('tf_kb_docs', JSON.stringify(d));
+    // ── Fetch docs from Supabase ────────────────────────────────────────────
+    const { data: allDocs = [] } = await supabase
+      .from('knowledge_base')
+      .select('id, name, category, file_type, file_size, extracted_text, extraction_note, created_at, storage_path')
+      .eq('company_id', companyId)
+      .order('created_at', { ascending: false });
+
+    const companyDocs = (allDocs || []).filter(d => d.category === 'company' || !d.category);
+    const tenderDocs  = (allDocs || []).filter(d => d.category === 'tender');
+
+    // ── Delete handler ──────────────────────────────────────────────────────
+    window._deleteKBDoc = async (id, storagePath) => {
+      if (!confirm('Delete this document from the Knowledge Base?')) return;
+      if (storagePath) {
+        await supabase.storage.from('knowledge-base').remove([storagePath]);
+      }
+      const { error } = await supabase.from('knowledge_base').delete().eq('id', id);
+      if (error) { window.TF?.toast?.(`Delete failed: ${error.message}`, 'error'); return; }
+      window.TF?.toast?.('Document deleted', 'success');
       const route = getCurrentRoute();
       if (route) refreshView(route);
     };
 
-    // ── KB text extraction ───────────────────────────────────────────────────
+    // ── Text extraction helper ──────────────────────────────────────────────
     async function _extractKBText(file) {
       const name = file.name.toLowerCase();
       if (file.type.startsWith('text/') || name.endsWith('.txt') || name.endsWith('.md')) {
@@ -839,7 +854,7 @@ const views = {
       }
       if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
         const pdfjs = window.pdfjsLib;
-        if (!pdfjs) throw new Error('PDF.js not available — ensure script tag is in index.html');
+        if (!pdfjs) throw new Error('PDF.js not available');
         if (!pdfjs.GlobalWorkerOptions.workerSrc) {
           pdfjs.GlobalWorkerOptions.workerSrc =
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -851,14 +866,12 @@ const views = {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
           const pageText = content.items
-            .map(item => item.str)
-            .join(' ')
+            .map(item => item.str).join(' ')
             .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ')
-            .replace(/\s{3,}/g, ' ')
-            .trim();
+            .replace(/\s{3,}/g, ' ').trim();
           if (pageText.length > 10) text += pageText + '\n\n';
         }
-        if (text.trim().length < 50) throw new Error('PDF appears to be image-based or scanned — no readable text found');
+        if (text.trim().length < 50) throw new Error('PDF appears to be image-based — no readable text found');
         return text.trim();
       }
       if (name.endsWith('.docx') || name.endsWith('.doc') || file.type.includes('wordprocessingml') || file.type.includes('msword')) {
@@ -866,75 +879,81 @@ const views = {
         const arrayBuffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer });
         if (!result.value || result.value.trim().length < 20) throw new Error('Could not extract text from Word document');
-        return result.value
-          .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ')
-          .replace(/\n{4,}/g, '\n\n')
-          .trim();
+        return result.value.replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ').replace(/\n{4,}/g, '\n\n').trim();
       }
       throw new Error(`Unsupported file type: ${file.type || name}`);
     }
 
-        window._uploadKBDocs = async (files, category, statusCallback) => {
+    // ── Upload handler (Supabase storage + DB) ──────────────────────────────
+    window._uploadKBDocs = async (files, category, statusCallback) => {
       const fileArray = Array.from(files);
       let successCount = 0;
       let failCount = 0;
+
       for (const f of fileArray) {
         try {
-          if (statusCallback) statusCallback(`Extracting ${f.name}...`);
+          if (statusCallback) statusCallback(`Uploading ${f.name}...`);
+
+          // 1. Upload file to Supabase Storage
+          const ext = f.name.split('.').pop();
+          const storagePath = `${companyId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error: uploadErr } = await supabase.storage
+            .from('knowledge-base')
+            .upload(storagePath, f, { upsert: false });
+          if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
+
+          // 2. Extract text
+          if (statusCallback) statusCallback(`Extracting text from ${f.name}...`);
           let extractedText = null;
           let extractionNote = null;
           try {
             extractedText = await _extractKBText(f);
-            if (extractedText.length > 50000) {
-              extractedText = extractedText.substring(0, 50000);
-              extractionNote = 'Content truncated to 50,000 characters for storage';
+            if (extractedText.length > 100000) {
+              extractedText = extractedText.substring(0, 100000);
+              extractionNote = 'Content truncated to 100,000 characters';
             }
           } catch (extractErr) {
             extractionNote = extractErr.message;
-            console.warn(`[KB] Text extraction failed for ${f.name}:`, extractErr.message);
           }
-          // Only store base64 for small text files — PDF/DOCX base64 blows the 5MB quota
-          const isTextFile = f.type.startsWith('text/') || f.name.endsWith('.txt') || f.name.endsWith('.md');
-          let dataUrl = null;
-          if (isTextFile && f.size < 500000) {
-            dataUrl = await new Promise((resolve, reject) => {
-              const rd = new FileReader();
-              rd.onload = ev => resolve(ev.target.result);
-              rd.onerror = reject;
-              rd.readAsDataURL(f);
-            });
-          }
-          const d = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
-          d.push({
-            id: Date.now() + Math.random(),
+
+          // 3. Save metadata + extracted text to DB
+          const { error: dbErr } = await supabase.from('knowledge_base').insert({
+            company_id: companyId,
             name: f.name,
-            size: f.size,
-            type: f.type,
             category: category || 'company',
-            content: dataUrl,
-            extractedText,
-            extractionNote,
-            uploadedAt: new Date().toISOString(),
+            file_type: f.type,
+            file_size: f.size,
+            storage_path: storagePath,
+            extracted_text: extractedText,
+            extraction_note: extractionNote,
+            uploaded_by: profile.id,
           });
-          localStorage.setItem('tf_kb_docs', JSON.stringify(d));
+          if (dbErr) {
+            // Clean up storage if DB insert fails
+            await supabase.storage.from('knowledge-base').remove([storagePath]);
+            throw new Error(`Database error: ${dbErr.message}`);
+          }
+
           successCount++;
         } catch (err) {
-          console.error(`[KB] Failed to store ${f.name}:`, err.message);
           failCount++;
+          window.TF?.toast?.(`Failed to upload ${f.name}: ${err.message}`, 'error');
         }
       }
+
       const route = getCurrentRoute();
       if (route) refreshView(route);
       return { successCount, failCount };
     };
 
+    // ── Modal handlers ──────────────────────────────────────────────────────
     window._showKBUploadModal = () => {
       const modal = document.createElement('div');
       modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm';
       modal.innerHTML = `
         <div class="bg-surface-800 border border-slate-700/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
           <h3 class="text-lg font-semibold text-white mb-1">Upload to Knowledge Base</h3>
-          <p class="text-xs text-slate-500 mb-4">Choose a category before uploading.</p>
+          <p class="text-xs text-slate-500 mb-4">Files are stored securely in Supabase — no size limits.</p>
           <div class="space-y-4">
             <div>
               <label class="block text-sm text-slate-300 mb-2">Category</label>
@@ -987,37 +1006,32 @@ const views = {
       const input = document.getElementById('kb-upload-input');
       const files = input?.files;
       if (!files || files.length === 0) { window.TF?.toast?.('Please select at least one file', 'warning'); return; }
-
-      // Show processing state on the button
       const btn = document.getElementById('kb-upload-confirm-btn');
       const statusEl = document.getElementById('kb-upload-status');
-      if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
-
+      if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
       const category = window._selectedKBCategory || 'company';
       const categoryLabel = category === 'tender' ? 'Past Tenders' : 'Company Documents';
-
       const { successCount, failCount } = await window._uploadKBDocs(files, category, (msg) => {
         if (statusEl) statusEl.textContent = msg;
       });
-
       document.querySelector('.fixed.inset-0.z-50')?.remove();
-
       if (failCount === 0) {
-        window.TF?.toast?.(`${successCount} file(s) processed and added to ${categoryLabel}`, 'success');
+        window.TF?.toast?.(`${successCount} file(s) uploaded to ${categoryLabel}`, 'success');
       } else {
-        window.TF?.toast?.(`${successCount} uploaded, ${failCount} failed — check console for details`, 'warning');
+        window.TF?.toast?.(`${successCount} uploaded, ${failCount} failed`, 'warning');
       }
     };
 
+    // ── Doc row renderer ────────────────────────────────────────────────────
     function docRow(d) {
-      const hasText = d.extractedText && d.extractedText.length > 20;
-      const wordCount = hasText ? Math.round(d.extractedText.split(/\s+/).length).toLocaleString() : 0;
+      const hasText = d.extracted_text && d.extracted_text.length > 20;
+      const wordCount = hasText ? Math.round(d.extracted_text.split(/\s+/).length).toLocaleString() : 0;
       const statusBadge = hasText
         ? `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
             AI-readable · ~${wordCount} words
            </span>`
-        : `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20" title="${d.extractionNote || 'No text extracted'}">
+        : `<span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20" title="${d.extraction_note || 'No text extracted'}">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             Not readable by AI
            </span>`;
@@ -1025,12 +1039,12 @@ const views = {
         <div class="min-w-0 flex-1">
           <p class="text-white text-sm font-medium truncate">${d.name}</p>
           <div class="flex items-center gap-2 mt-1">
-            <p class="text-slate-500 text-xs">${(d.size/1024).toFixed(1)} KB · ${new Date(d.uploadedAt).toLocaleDateString()}</p>
+            <p class="text-slate-500 text-xs">${d.file_size ? (d.file_size/1024).toFixed(1) + ' KB · ' : ''}${new Date(d.created_at).toLocaleDateString()}</p>
             ${statusBadge}
           </div>
-          ${!hasText && d.extractionNote ? `<p class="text-slate-600 text-[10px] mt-0.5 truncate" title="${d.extractionNote}">${d.extractionNote}</p>` : ''}
+          ${!hasText && d.extraction_note ? `<p class="text-slate-600 text-[10px] mt-0.5 truncate">${d.extraction_note}</p>` : ''}
         </div>
-        <button onclick="window._deleteKBDoc(${d.id})" class="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10 transition ml-3 shrink-0">Delete</button>
+        <button onclick="window._deleteKBDoc('${d.id}', '${d.storage_path || ''}')" class="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded hover:bg-red-500/10 transition ml-3 shrink-0">Delete</button>
       </div>`;
     }
 
@@ -1038,7 +1052,7 @@ const views = {
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-2xl font-bold text-white">Knowledge Base</h1>
-          <p class="text-slate-400 mt-1">Company documents and past tenders used to answer RFP questions</p>
+          <p class="text-slate-400 mt-1">Company documents and past tenders used to answer RFP questions — stored in Supabase, shared across your team</p>
         </div>
         <button onclick="window._showKBUploadModal()" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg font-medium flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1046,7 +1060,7 @@ const views = {
         </button>
       </div>
       <div class="grid grid-cols-3 gap-4">
-        <div class="bg-surface-800 rounded-xl p-4 border border-slate-700"><p class="text-slate-400 text-sm">Total Documents</p><p class="text-2xl font-bold text-white">${allDocs.length}</p></div>
+        <div class="bg-surface-800 rounded-xl p-4 border border-slate-700"><p class="text-slate-400 text-sm">Total Documents</p><p class="text-2xl font-bold text-white">${(allDocs || []).length}</p></div>
         <div class="bg-surface-800 rounded-xl p-4 border border-slate-700"><p class="text-slate-400 text-sm">Company Docs</p><p class="text-2xl font-bold text-brand-400">${companyDocs.length}</p></div>
         <div class="bg-surface-800 rounded-xl p-4 border border-slate-700"><p class="text-slate-400 text-sm">Past Tenders</p><p class="text-2xl font-bold text-violet-400">${tenderDocs.length}</p></div>
       </div>
