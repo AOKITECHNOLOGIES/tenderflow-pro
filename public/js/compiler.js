@@ -742,18 +742,21 @@ export async function compileAndDownload(tender, tasks) {
     ['Classification',   'Confidential'],
   ].filter(([, v]) => v !== null);
 
+  // Cover table: 9026 DXA total (Word page width minus margins)
+  // columnWidths is required by docx@8.5.0 to enforce column widths
+  const COL1 = 2700;  // ~30% — label column
+  const COL2 = 6326;  // ~70% — value column
+  const cellBorderStyle = { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' };
+  const allBorders = { top: cellBorderStyle, bottom: cellBorderStyle, left: cellBorderStyle, right: cellBorderStyle };
+
   children.push(new Table({
-    width: { size: 9026, type: WidthType.DXA },
-    rows: metaRows.map(([label, value], rowIdx) => new TableRow({
+    width: { size: COL1 + COL2, type: WidthType.DXA },
+    columnWidths: [COL1, COL2],
+    rows: metaRows.map(([label, value]) => new TableRow({
       children: [
         new TableCell({
-          width: { size: 2900, type: WidthType.DXA },
-          borders: {
-            top:    { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
-            bottom: { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
-            left:   { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
-            right:  { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
-          },
+          width: { size: COL1, type: WidthType.DXA },
+          borders: allBorders,
           shading: { fill: 'f8fafc' },
           children: [new Paragraph({
             children: [new TextRun({ text: label, bold: true, size: bodySize - 2, color: '475569', font })],
@@ -762,13 +765,8 @@ export async function compileAndDownload(tender, tasks) {
           })],
         }),
         new TableCell({
-          width: { size: 6126, type: WidthType.DXA },
-          borders: {
-            top:    { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
-            bottom: { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
-            left:   { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
-            right:  { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
-          },
+          width: { size: COL2, type: WidthType.DXA },
+          borders: allBorders,
           children: [new Paragraph({
             children: [new TextRun({ text: value, size: bodySize - 2, font })],
             spacing: { before: 80, after: 80 },
