@@ -193,36 +193,38 @@ window._aiChatKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window._aiChatSend(); }
 };
 
-// ── Load Knowledge Base from localStorage ─────────────────────────────────────
-function loadKnowledgeBase() {
+// ── Load Knowledge Base from Supabase ────────────────────────────────────────
+async function loadKnowledgeBase() {
   try {
-    const docs = JSON.parse(localStorage.getItem('tf_kb_docs') || '[]');
-    if (!docs.length) return null;
+    const profile = getProfile();
+    if (!profile?.company_id) return null;
+
+    const { data: docs, error } = await supabase
+      .from('knowledge_base')
+      .select('id, name, category, file_size, extracted_text, extraction_note, created_at')
+      .eq('company_id', profile.company_id)
+      .order('created_at', { ascending: false });
+
+    if (error || !docs?.length) return null;
 
     const previews = docs.map(d => {
       const category = d.category === 'tender' ? 'Past Tender' : 'Company Document';
       let textPreview = '';
 
-      if (d.extractedText && d.extractedText.length > 20) {
-        textPreview = d.extractedText.substring(0, 8000);
-        if (d.extractedText.length > 8000) {
-          textPreview += `\n\n[... ${Math.round((d.extractedText.length - 8000) / 5).toLocaleString()} more words not shown]`;
+      if (d.extracted_text && d.extracted_text.length > 20) {
+        textPreview = d.extracted_text.substring(0, 8000);
+        if (d.extracted_text.length > 8000) {
+          textPreview += `\n\n[... ${Math.round((d.extracted_text.length - 8000) / 5).toLocaleString()} more words not shown]`;
         }
-      } else if (d.extractionNote) {
-        textPreview = `[Could not extract text: ${d.extractionNote}]`;
+      } else if (d.extraction_note) {
+        textPreview = `[Could not extract text: ${d.extraction_note}]`;
       } else {
-        try {
-          if (d.content && d.content.startsWith('data:text')) {
-            const base64 = d.content.split(',')[1];
-            if (base64) textPreview = atob(base64).substring(0, 4000).replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
-          }
-        } catch (_) {}
-        if (!textPreview) textPreview = '[No text content — re-upload this file to enable AI reading]';
+        textPreview = '[No text content available]';
       }
 
-      const wordCount = d.extractedText ? Math.round(d.extractedText.split(/\s+/).length).toLocaleString() : null;
+      const wordCount = d.extracted_text ? Math.round(d.extracted_text.split(/\s+/).length).toLocaleString() : null;
       let entry = `[${category}] ${d.name}`;
-      if (d.size) entry += ` (${(d.size / 1024).toFixed(1)} KB${wordCount ? `, ~${wordCount} words` : ''})`;
+      if (d.file_size) entry += ` (${(d.file_size / 1024).toFixed(1)} KB${wordCount ? `, ~${wordCount} words` : ''})`;
       entry += `\nContent:\n${textPreview}`;
       return entry;
     }).join('\n\n---\n\n');
@@ -364,7 +366,7 @@ async function buildContext() {
   };
 
   // Knowledge Base
-  const kb = loadKnowledgeBase();
+  const kb = await loadKnowledgeBase();
   if (kb) {
     ctx.knowledge_base = kb;
     const ind = document.getElementById('ai-kb-indicator');
@@ -469,8 +471,8 @@ async function updateContextLabel() {
     const { data } = await supabase.from('tasks').select('title').eq('id', params.id).single();
     label.textContent = data ? `Context: ${data.title}` : 'Task context';
   } else if (view === 'knowledge-base') {
-    const kb = loadKnowledgeBase();
-    label.textContent = kb
+    const kb = await loadKnowledgeBase();
+    label.textContent = kb && kb.count > 0
       ? `Knowledge Base · ${kb.count} doc${kb.count !== 1 ? 's' : ''} (${kb.companyDocs} company, ${kb.tenderDocs} tenders)`
       : 'Knowledge Base (empty)';
   } else {
@@ -490,7 +492,7 @@ async function refreshSuggestions() {
 
   const route = getCurrentRoute();
   const view = route?.view || 'dashboard';
-  const kb = loadKnowledgeBase();
+  const kb = await loadKnowledgeBase();
   const hasKB = (kb?.count || 0) > 0;
 
   const suggestionMap = {
