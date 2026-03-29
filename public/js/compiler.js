@@ -348,7 +348,7 @@ function generateCompiledHTML({ tender, companyName, logoUrl, sections, generate
         Section: ${sectionLabel} &nbsp;|&nbsp; Author: ${section.author} &nbsp;|&nbsp; Dept: ${section.department}
         ${section.is_mandatory ? '&nbsp;|&nbsp; <strong style="color:#dc2626;">MANDATORY</strong>' : ''}
       </p>
-      <div style="font-size:14px; line-height:1.8; color:#334155;">${rawContent}</div>
+      <div class="section-content" style="font-size:14px; line-height:1.8; color:#334155;">${rawContent}</div>
     </div>`;
   }
 
@@ -361,6 +361,32 @@ function generateCompiledHTML({ tender, companyName, logoUrl, sections, generate
     @media print { .no-print { display: none !important; } body { font-size: 12px; } }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px; color: #1e293b; }
     a { color: #0284c7; }
+    /* Quill content formatting */
+    .ql-editor { padding: 0; }
+    .ql-align-center { text-align: center; }
+    .ql-align-right  { text-align: right; }
+    .ql-align-justify { text-align: justify; }
+    .ql-indent-1 { padding-left: 2em; }
+    .ql-indent-2 { padding-left: 4em; }
+    .ql-indent-3 { padding-left: 6em; }
+    /* Section content */
+    .section-content h1 { font-size: 20px; font-weight: 700; margin: 16px 0 8px; color: #0f172a; }
+    .section-content h2 { font-size: 17px; font-weight: 700; margin: 14px 0 6px; color: #0f172a; }
+    .section-content h3 { font-size: 15px; font-weight: 600; margin: 12px 0 4px; color: #1e293b; }
+    .section-content p  { margin: 0 0 8px; line-height: 1.75; }
+    .section-content ul, .section-content ol { padding-left: 1.5em; margin: 4px 0 8px; }
+    .section-content li { margin-bottom: 4px; line-height: 1.7; }
+    .section-content strong { font-weight: 700; }
+    .section-content em { font-style: italic; }
+    .section-content u { text-decoration: underline; }
+    .section-content s { text-decoration: line-through; }
+    .section-content blockquote { border-left: 3px solid #e2e8f0; padding-left: 12px; color: #64748b; margin: 8px 0; }
+    .section-content table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+    .section-content td, .section-content th { border: 1px solid #cbd5e1; padding: 6px 10px; }
+    .section-content th { background: #f1f5f9; font-weight: 600; }
+    .section-content pre { background: #f8fafc; padding: 10px 14px; border-radius: 4px; font-size: 13px; overflow-x: auto; }
+    .section-content code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+    .section-content img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
   </style>
 </head>
 <body>
@@ -586,47 +612,98 @@ export async function compileAndDownload(tender, tasks) {
     try {
       let uint8 = null;
       let imageType = 'png';
+      console.log('[Logo] Attempting to fetch logo:', logoUrl);
 
-      // Try Supabase storage download first (handles auth automatically)
-      // Extract bucket and path from any Supabase storage URL format
-      // URL formats: .../storage/v1/object/public/bucket-name/path/file.ext
-      //              .../storage/v1/object/authenticated/bucket-name/path/file.ext
-      const storageMatch = logoUrl.match(/\/storage\/v1\/object\/(?:public|authenticated|sign)\/([^?#]+)/);
+      // Detect extension first for type hint
+      const extMatch = logoUrl.match(/\.([a-z]+)(?:[?#]|$)/i);
+      const urlExt = extMatch ? extMatch[1].toLowerCase() : '';
+      if (urlExt === 'svg') imageType = 'svg';
+      else if (urlExt === 'jpg' || urlExt === 'jpeg') imageType = 'jpg';
+      else if (urlExt === 'png') imageType = 'png';
+
+      // Strategy 1: Try Supabase authenticated download (best for private/auth buckets)
+      // URL formats: .../storage/v1/object/public/bucket/path
+      //              .../storage/v1/object/authenticated/bucket/path
+      //              .../storage/v1/object/sign/bucket/path
+      const storageMatch = logoUrl.match(/\/storage\/v1\/object\/(?:public|authenticated|sign)\/(.+)/);
       if (storageMatch) {
-        const fullPath = storageMatch[1]; // "bucket-name/path/to/file.ext"
-        const slashIdx = fullPath.indexOf('/');
-        const bucket = slashIdx !== -1 ? fullPath.substring(0, slashIdx) : fullPath;
-        const path   = slashIdx !== -1 ? fullPath.substring(slashIdx + 1) : '';
-        if (bucket && path) {
-          const { data: blob, error } = await supabase.storage.from(bucket).download(path);
-          if (!error && blob) {
+        // Strip query string, then split bucket from path
+        const cleanPath = storageMatch[1].split('?')[0];
+        const slashIdx  = cleanPath.indexOf('/');
+        const bucket    = slashIdx !== -1 ? cleanPath.substring(0, slashIdx) : cleanPath;
+        const filePath  = slashIdx !== -1 ? cleanPath.substring(slashIdx + 1) : '';
+        console.log('[Logo] Supabase storage — bucket:', bucket, 'path:', filePath);
+        if (bucket && filePath) {
+          const { data: blob, error: dlErr } = await supabase.storage.from(bucket).download(filePath);
+          if (!dlErr && blob) {
             const buf = await blob.arrayBuffer();
             uint8 = new Uint8Array(buf);
-            const ct = blob.type || 'image/png';
-            imageType = ct.includes('png') ? 'png' : ct.includes('svg') ? 'svg' : 'jpg';
+            const ct = blob.type || '';
+            if (ct.includes('svg')) imageType = 'svg';
+            else if (ct.includes('png')) imageType = 'png';
+            else if (ct.includes('jpg') || ct.includes('jpeg')) imageType = 'jpg';
+            console.log('[Logo] Supabase download OK — type:', imageType, 'bytes:', uint8.length);
+          } else {
+            console.warn('[Logo] Supabase download failed:', dlErr?.message);
           }
         }
       }
 
-      // Fallback: plain fetch (works for public URLs)
+      // Strategy 2: Plain fetch — works for public Supabase URLs and external CDN URLs
       if (!uint8) {
+        console.log('[Logo] Trying plain fetch...');
         const res = await fetch(logoUrl);
         if (res.ok) {
           const buf = await res.arrayBuffer();
           uint8 = new Uint8Array(buf);
-          const ct = res.headers.get('content-type') || 'image/png';
-          imageType = ct.includes('png') ? 'png' : ct.includes('svg') ? 'svg' : 'jpg';
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('svg')) imageType = 'svg';
+          else if (ct.includes('png')) imageType = 'png';
+          else if (ct.includes('jpg') || ct.includes('jpeg')) imageType = 'jpg';
+          console.log('[Logo] Fetch OK — type:', imageType, 'bytes:', uint8.length);
+        } else {
+          console.warn('[Logo] Fetch failed — status:', res.status, res.statusText);
         }
       }
 
-      if (uint8) {
-        children.push(new Paragraph({
-          children: [new ImageRun({ data: uint8, transformation: { width: 150, height: 60 }, type: imageType })],
-          alignment: AlignmentType.LEFT,
-          spacing: { before: 400, after: 400 },
-        }));
+      if (uint8 && uint8.length > 0) {
+        // SVG files must be converted to PNG for docx — use canvas
+        if (imageType === 'svg') {
+          try {
+            const svgStr = new TextDecoder().decode(uint8);
+            const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+            const blobUrl = URL.createObjectURL(blob);
+            const img = await new Promise((res, rej) => {
+              const i = new Image(); i.onload = () => res(i); i.onerror = rej;
+              i.src = blobUrl;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = 300; canvas.height = 120;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 300, 120);
+            URL.revokeObjectURL(blobUrl);
+            const pngBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            const pngBuf = await pngBlob.arrayBuffer();
+            uint8 = new Uint8Array(pngBuf);
+            imageType = 'png';
+            console.log('[Logo] SVG→PNG conversion OK, bytes:', uint8.length);
+          } catch (svgErr) {
+            console.warn('[Logo] SVG conversion failed:', svgErr.message, '— skipping logo');
+            uint8 = null;
+          }
+        }
+        if (uint8) {
+          children.push(new Paragraph({
+            children: [new ImageRun({ data: uint8, transformation: { width: 150, height: 60 }, type: imageType })],
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 400, after: 400 },
+          }));
+          console.log('[Logo] Added to document ✓');
+        }
+      } else {
+        console.warn('[Logo] No image data — logo skipped');
       }
-    } catch (e) { console.warn('[Logo] Failed to fetch logo:', e.message); }
+    } catch (e) { console.warn('[Logo] Unexpected error:', e.message); }
   }
 
   // ── Cover title ───────────────────────────────────────────────────────────
@@ -667,22 +744,35 @@ export async function compileAndDownload(tender, tasks) {
 
   children.push(new Table({
     width: { size: 9026, type: WidthType.DXA },
-    rows: metaRows.map(([label, value]) => new TableRow({
+    rows: metaRows.map(([label, value], rowIdx) => new TableRow({
       children: [
         new TableCell({
-          width: { size: 2708, type: WidthType.DXA },
-          borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
+          width: { size: 2900, type: WidthType.DXA },
+          borders: {
+            top:    { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
+            bottom: { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
+            left:   { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
+            right:  { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
+          },
+          shading: { fill: 'f8fafc' },
           children: [new Paragraph({
-            children: [new TextRun({ text: label, bold: true, size: bodySize - 2, color: '64748b', font })],
-            spacing: { before: 60, after: 60 },
+            children: [new TextRun({ text: label, bold: true, size: bodySize - 2, color: '475569', font })],
+            spacing: { before: 80, after: 80 },
+            indent: { left: 120 },
           })],
         }),
         new TableCell({
-          width: { size: 6318, type: WidthType.DXA },
-          borders: { top: cellBorder, bottom: cellBorder, left: noBorder, right: noBorder },
+          width: { size: 6126, type: WidthType.DXA },
+          borders: {
+            top:    { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
+            bottom: { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
+            left:   { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
+            right:  { style: BorderStyle.SINGLE, size: 4, color: 'e2e8f0' },
+          },
           children: [new Paragraph({
             children: [new TextRun({ text: value, size: bodySize - 2, font })],
-            spacing: { before: 60, after: 60 },
+            spacing: { before: 80, after: 80 },
+            indent: { left: 120 },
           })],
         }),
       ],
